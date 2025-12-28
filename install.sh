@@ -81,25 +81,84 @@ fi
 echo -e "${GREEN}Detected: Firewalla ${SERIES:-Gold}${NC}"
 echo ""
 
-# Detect network interface and current IP
-echo "Detecting network configuration..."
+# Detect available networks on Firewalla
+echo "Detecting available networks..."
+echo ""
+echo -e "${YELLOW}Available Networks on Firewalla:${NC}"
+ip -4 addr show | grep -E "^[0-9]+: |inet " | sed 'N;s/\n/ /' | awk '{
+    if ($2 ~ /:$/) {
+        iface = substr($2, 1, length($2)-1);
+        getline;
+        if ($1 == "inet") {
+            split($2, addr, "/");
+            split(addr[1], octets, ".");
+            network = octets[1] "." octets[2] "." octets[3] ".0/" addr[2];
+            printf "  %-10s %-18s %s\n", iface, addr[1], network;
+        }
+    }
+}'
+
+echo ""
+echo -e "${YELLOW}Network Selection${NC}"
+echo "You can use an existing network or specify a custom one."
+echo ""
+
+# Get br0 IP as default suggestion
 DETECTED_IP=$(ip addr show br0 2>/dev/null | grep "inet " | awk '{print $2}' | cut -d/ -f1 || echo "")
+DETECTED_CIDR=$(ip addr show br0 2>/dev/null | grep "inet " | awk '{print $2}' | cut -d/ -f2 || echo "24")
 
 if [ -z "$DETECTED_IP" ]; then
     echo -e "${RED}Error: Could not detect IP address on br0 interface.${NC}"
     exit 1
 fi
 
-# Extract network prefix (e.g., 192.168.240 from 192.168.240.1)
-NETWORK_PREFIX=$(echo "$DETECTED_IP" | cut -d. -f1-3)
+# Extract network prefix and calculate subnet
+IFS='.' read -r o1 o2 o3 o4 <<< "$DETECTED_IP"
+DEFAULT_NETWORK="${o1}.${o2}.${o3}.0/${DETECTED_CIDR}"
+DEFAULT_GATEWAY="${DETECTED_IP}"
 
-echo -e "  Interface: ${GREEN}br0${NC}"
-echo -e "  Firewalla IP: ${GREEN}${DETECTED_IP}${NC}"
-echo -e "  Network: ${GREEN}${NETWORK_PREFIX}.0/24${NC}"
+echo -e "Default network (br0): ${GREEN}${DEFAULT_NETWORK}${NC}"
+echo -e "Default gateway: ${GREEN}${DEFAULT_GATEWAY}${NC}"
+echo ""
+
+# Network selection
+read -p "Use a different network? (y/N): " -n 1 -r USE_CUSTOM_NETWORK
+echo
+if [[ $USE_CUSTOM_NETWORK =~ ^[Yy]$ ]]; then
+    while true; do
+        read -p "Enter network (e.g., 192.168.50.0/24): " CUSTOM_NETWORK
+        if [[ $CUSTOM_NETWORK =~ ^[0-9]+\.[0-9]+\.[0-9]+\.0/[0-9]+$ ]]; then
+            NETWORK_CIDR="${CUSTOM_NETWORK#*/}"
+            NETWORK_BASE="${CUSTOM_NETWORK%/*}"
+            IFS='.' read -r n1 n2 n3 n4 <<< "$NETWORK_BASE"
+            NETWORK_PREFIX="${n1}.${n2}.${n3}"
+
+            read -p "Enter gateway IP for this network (e.g., ${NETWORK_PREFIX}.1): " CUSTOM_GATEWAY
+            if [[ $CUSTOM_GATEWAY =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+                GATEWAY_IP="$CUSTOM_GATEWAY"
+                break
+            else
+                echo -e "${RED}Invalid gateway IP format. Please try again.${NC}"
+            fi
+        else
+            echo -e "${RED}Invalid network format. Use format: 192.168.1.0/24${NC}"
+        fi
+    done
+else
+    NETWORK_CIDR="$DETECTED_CIDR"
+    NETWORK_BASE="${o1}.${o2}.${o3}.0"
+    NETWORK_PREFIX="${o1}.${o2}.${o3}"
+    GATEWAY_IP="$DEFAULT_GATEWAY"
+fi
+
+echo ""
+echo -e "${YELLOW}Selected Network Configuration:${NC}"
+echo -e "  Network:  ${GREEN}${NETWORK_BASE}/${NETWORK_CIDR}${NC}"
+echo -e "  Gateway:  ${GREEN}${GATEWAY_IP}${NC}"
 echo ""
 
 # Configuration prompts
-echo -e "${YELLOW}Configuration${NC}"
+echo -e "${YELLOW}Container Configuration${NC}"
 echo "─────────────────────────────────────────────────────────────────"
 
 # Controller IP
@@ -173,8 +232,8 @@ echo ""
 echo -e "${YELLOW}Configuration Summary${NC}"
 echo "─────────────────────────────────────────────────────────────────"
 echo -e "  Network Interface:    br0"
-echo -e "  Network:              ${NETWORK_PREFIX}.0/24"
-echo -e "  Gateway (Firewalla):  ${GATEWAY_IP}"
+echo -e "  Network:              ${NETWORK_BASE}/${NETWORK_CIDR}"
+echo -e "  Gateway:              ${GATEWAY_IP}"
 echo -e "  UniFi Controller:     ${CONTROLLER_IP}"
 echo -e "  MongoDB:              Internal Docker network (not exposed)"
 echo -e "  Reserved IPs:         ${IP_COUNT} (${CONTROLLER_IP}${IP_RANGE_CIDR})"
@@ -267,7 +326,7 @@ networks:
       parent: br0
     ipam:
       config:
-        - subnet: ${NETWORK_PREFIX}.0/24
+        - subnet: ${NETWORK_BASE}/${NETWORK_CIDR}
           gateway: ${GATEWAY_IP}
           ip_range: ${CONTROLLER_IP}${IP_RANGE_CIDR}
 EOF
@@ -310,6 +369,8 @@ sudo bash -c "cat > /data/unifi/install-config.txt" << EOF
 # Generated: $(date)
 CONTROLLER_IP=${CONTROLLER_IP}
 GATEWAY_IP=${GATEWAY_IP}
+NETWORK_BASE=${NETWORK_BASE}
+NETWORK_CIDR=${NETWORK_CIDR}
 NETWORK_PREFIX=${NETWORK_PREFIX}
 TZ_SETTING=${TZ_SETTING}
 SHIM_IP=${SHIM_IP}
@@ -378,7 +439,7 @@ echo ""
 if [ -z "$SHIM_IP" ]; then
     echo -e "${YELLOW}Important:${NC} Due to macvlan networking, you cannot access the"
     echo -e "           controller directly from the Firewalla (${GATEWAY_IP})."
-    echo -e "           Use another device on the ${NETWORK_PREFIX}.0/24 network."
+    echo -e "           Use another device on the ${NETWORK_BASE}/${NETWORK_CIDR} network."
     echo -e "           (Re-run installer with shim enabled for host access)"
     echo ""
 fi
