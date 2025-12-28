@@ -131,9 +131,6 @@ if [ -d /home/pi/.firewalla/run/docker/unifi ] || \
 
             # Remove data directories - force complete deletion
             echo -n "  Removing data directories... "
-            # Ensure no processes are accessing the directories
-            sudo fuser -km /data/unifi-db 2>/dev/null || true
-            sudo fuser -km /data/unifi 2>/dev/null || true
             sudo rm -rf /data/unifi/* /data/unifi/.* 2>/dev/null || true
             sudo rm -rf /data/unifi-db/* /data/unifi-db/.* 2>/dev/null || true
             sudo rm -rf /data/unifi /data/unifi-db
