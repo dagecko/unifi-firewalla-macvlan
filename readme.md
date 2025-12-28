@@ -38,7 +38,14 @@ Internal Docker Network (not exposed to network):
 SSH into your Firewalla and run:
 
 ```bash
-curl -sL "https://raw.githubusercontent.com/dagecko/unifi-firewalla-macvlan/main/install.sh" | bash
+bash <(curl -sL "https://raw.githubusercontent.com/dagecko/unifi-firewalla-macvlan/main/install.sh")
+```
+
+Or download and run:
+
+```bash
+curl -sL "https://raw.githubusercontent.com/dagecko/unifi-firewalla-macvlan/main/install.sh" -o /tmp/install.sh
+bash /tmp/install.sh
 ```
 
 The script will prompt you for:
