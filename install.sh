@@ -410,6 +410,16 @@ ESCAPED_PASSWORD=$(printf '%s\n' "$MONGO_PASSWORD" | sed 's/[&/\]/\\&/g')
 sudo sed -i "s|MONGO_PASSWORD_PLACEHOLDER|${ESCAPED_PASSWORD}|g" /home/pi/.firewalla/run/docker/unifi/init-mongo.js
 echo -e "${GREEN}✓${NC}"
 
+# Create .env file with password (safer than embedding in YAML)
+# TODO: Future enhancement - support AWS Secrets Manager and other secret stores
+echo -n "Creating environment file... "
+sudo bash -c "cat > /home/pi/.firewalla/run/docker/unifi/.env" << 'ENVEOF'
+MONGO_PASSWORD=MONGO_PASSWORD_PLACEHOLDER
+ENVEOF
+sudo sed -i "s|MONGO_PASSWORD_PLACEHOLDER|${ESCAPED_PASSWORD}|g" /home/pi/.firewalla/run/docker/unifi/.env
+sudo chmod 600 /home/pi/.firewalla/run/docker/unifi/.env
+echo -e "${GREEN}✓${NC}"
+
 # Create docker-compose.yaml with hybrid networking
 echo -n "Creating docker-compose.yaml... "
 sudo bash -c "cat > /home/pi/.firewalla/run/docker/unifi/docker-compose.yaml" << 'EOF'
@@ -438,7 +448,7 @@ services:
       - PGID=1000
       - TZ=TZ_SETTING_PLACEHOLDER
       - MONGO_USER=unifi
-      - MONGO_PASS='MONGO_PASSWORD_PLACEHOLDER'
+      - MONGO_PASS=${MONGO_PASSWORD}
       - MONGO_HOST=unifi-db
       - MONGO_PORT=27017
       - MONGO_DBNAME=unifi
@@ -465,9 +475,8 @@ networks:
           gateway: GATEWAY_IP_PLACEHOLDER
           ip_range: CONTROLLER_IP_PLACEHOLDERIP_RANGE_CIDR_PLACEHOLDER
 EOF
-# Replace all placeholders with actual values - password already escaped above
+# Replace all placeholders with actual values - password comes from .env file
 sudo sed -i "s|TZ_SETTING_PLACEHOLDER|${TZ_SETTING}|g" /home/pi/.firewalla/run/docker/unifi/docker-compose.yaml
-sudo sed -i "s|MONGO_PASSWORD_PLACEHOLDER|${ESCAPED_PASSWORD}|g" /home/pi/.firewalla/run/docker/unifi/docker-compose.yaml
 sudo sed -i "s|CONTROLLER_IP_PLACEHOLDER|${CONTROLLER_IP}|g" /home/pi/.firewalla/run/docker/unifi/docker-compose.yaml
 sudo sed -i "s|NETWORK_BASE_PLACEHOLDER|${NETWORK_BASE}|g" /home/pi/.firewalla/run/docker/unifi/docker-compose.yaml
 sudo sed -i "s|NETWORK_CIDR_PLACEHOLDER|${NETWORK_CIDR}|g" /home/pi/.firewalla/run/docker/unifi/docker-compose.yaml
