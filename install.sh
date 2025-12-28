@@ -563,6 +563,16 @@ for i in {1..30}; do
 done
 echo ""
 
+# Fix system.properties - URL encode the password to avoid sed corruption in container
+echo -n "Fixing MongoDB connection string... "
+# URL encode special characters in password
+URL_ENCODED_PASS=$(python3 -c "import urllib.parse; print(urllib.parse.quote('${MONGO_PASSWORD}', safe=''))" 2>/dev/null || \
+                   printf '%s' "${MONGO_PASSWORD}" | sed 's/!/%21/g; s/#/%23/g; s/\$/%24/g; s/&/%26/g; s/\^/%5E/g')
+sudo docker exec unifi sed -i "s|mongodb://unifi:[^@]*@|mongodb://unifi:${URL_ENCODED_PASS}@|g" /config/data/system.properties 2>/dev/null || true
+sudo docker restart unifi >/dev/null 2>&1
+sleep 5
+echo -e "${GREEN}✓${NC}"
+
 # Check final status
 echo ""
 echo -e "${YELLOW}Container Status${NC}"
