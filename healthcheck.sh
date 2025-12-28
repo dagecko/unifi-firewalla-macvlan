@@ -21,7 +21,6 @@ fi
 
 # Defaults if config not found
 CONTROLLER_IP=${CONTROLLER_IP:-"192.168.240.2"}
-MONGO_IP=${MONGO_IP:-"192.168.240.3"}
 
 HEALTHY=true
 MESSAGES=()

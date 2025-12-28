@@ -62,7 +62,6 @@ Once the shim is in place, you can create health checks. Save as `/home/pi/.fire
 # Returns 0 if healthy, 1 if unhealthy
 
 CONTROLLER_IP="192.168.240.2"
-MONGO_IP="192.168.240.3"
 
 # Check if containers are running
 UNIFI_RUNNING=$(docker inspect -f '{{.State.Running}}' unifi 2>/dev/null)
