@@ -146,10 +146,15 @@ if [ -d /home/pi/.firewalla/run/docker/unifi ] || \
             sudo mkdir -p /data/unifi
             sudo mkdir -p /data/unifi-db
 
-            # Verify MongoDB directory is empty
+            # Verify directories are empty
             if [ "$(sudo ls -A /data/unifi-db 2>/dev/null)" ]; then
                 echo -e "${RED}✗ Failed to clean MongoDB directory${NC}"
                 echo "Please manually remove: sudo rm -rf /data/unifi-db/*"
+                exit 1
+            fi
+            if [ "$(sudo ls -A /data/unifi 2>/dev/null)" ]; then
+                echo -e "${RED}✗ Failed to clean UniFi directory${NC}"
+                echo "Please manually remove: sudo rm -rf /data/unifi/*"
                 exit 1
             fi
             echo -e "${GREEN}✓${NC}"
