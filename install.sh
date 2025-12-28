@@ -113,9 +113,15 @@ if [ -d /home/pi/.firewalla/run/docker/unifi ] || \
             sudo docker stop unifi unifi-db 2>/dev/null || true
             sudo docker rm -f unifi unifi-db 2>/dev/null || true
 
+            # Wait for containers to fully release filesystem locks
+            sleep 3
+
             # Remove any orphaned volumes
             sudo docker volume rm unifi_unifi-db-data 2>/dev/null || true
             sudo docker volume prune -f 2>/dev/null || true
+
+            # Remove MongoDB image to force fresh pull
+            sudo docker rmi mongo:4.4 2>/dev/null || true
 
             # Remove networks
             sudo docker network rm unifi_unifi-internal unifi_unifi-net 2>/dev/null || true
@@ -125,6 +131,9 @@ if [ -d /home/pi/.firewalla/run/docker/unifi ] || \
 
             # Remove data directories - force complete deletion
             echo -n "  Removing data directories... "
+            # Ensure no processes are accessing the directories
+            sudo fuser -km /data/unifi-db 2>/dev/null || true
+            sudo fuser -km /data/unifi 2>/dev/null || true
             sudo rm -rf /data/unifi/* /data/unifi/.* 2>/dev/null || true
             sudo rm -rf /data/unifi-db/* /data/unifi-db/.* 2>/dev/null || true
             sudo rm -rf /data/unifi /data/unifi-db
