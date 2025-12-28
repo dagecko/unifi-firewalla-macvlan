@@ -52,13 +52,28 @@ sudo docker rmi lscr.io/linuxserver/unifi-network-application:latest 2>/dev/null
 sudo docker rmi mongo:4.4 2>/dev/null && echo -e "${GREEN}✓ MongoDB image removed${NC}" || echo -e "${YELLOW}⚠ MongoDB image not found${NC}"
 
 echo ""
-echo -e "${YELLOW}Removing Docker network...${NC}"
-sudo docker network rm unifi_unifi-net 2>/dev/null && echo -e "${GREEN}✓ Network removed${NC}" || echo -e "${YELLOW}⚠ Network not found${NC}"
+echo -e "${YELLOW}Removing Docker networks...${NC}"
+sudo docker network rm unifi_unifi-internal 2>/dev/null && echo -e "${GREEN}✓ unifi_unifi-internal network removed${NC}" || echo -e "${YELLOW}⚠ unifi_unifi-internal network not found${NC}"
+sudo docker network rm unifi_unifi-net 2>/dev/null && echo -e "${GREEN}✓ unifi_unifi-net network removed${NC}" || echo -e "${YELLOW}⚠ unifi_unifi-net network not found${NC}"
+
+echo ""
+echo -e "${YELLOW}Removing shim interface...${NC}"
+sudo ip link delete unifi-shim 2>/dev/null && echo -e "${GREEN}✓ Shim interface removed${NC}" || echo -e "${YELLOW}⚠ Shim interface not found${NC}"
 
 echo ""
 echo -e "${YELLOW}Removing data directories...${NC}"
-sudo rm -rf /data/unifi 2>/dev/null && echo -e "${GREEN}✓ /data/unifi removed${NC}" || echo -e "${YELLOW}⚠ /data/unifi not found${NC}"
-sudo rm -rf /data/unifi-db 2>/dev/null && echo -e "${GREEN}✓ /data/unifi-db removed${NC}" || echo -e "${YELLOW}⚠ /data/unifi-db not found${NC}"
+if [ -d /data/unifi ] || [ -d /data/unifi-db ]; then
+    echo -e "${YELLOW}Note: This will delete all UniFi configuration and database!${NC}"
+    read -p "Delete all data? (yes/N): " DELETE_DATA
+    if [ "$DELETE_DATA" = "yes" ]; then
+        sudo rm -rf /data/unifi 2>/dev/null && echo -e "${GREEN}✓ /data/unifi removed${NC}" || true
+        sudo rm -rf /data/unifi-db 2>/dev/null && echo -e "${GREEN}✓ /data/unifi-db removed${NC}" || true
+    else
+        echo -e "${YELLOW}⚠ Data directories preserved${NC}"
+    fi
+else
+    echo -e "${YELLOW}⚠ No data directories found${NC}"
+fi
 
 echo ""
 echo -e "${YELLOW}Removing configuration files...${NC}"

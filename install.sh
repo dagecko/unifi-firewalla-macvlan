@@ -63,6 +63,89 @@ fi
 echo -e "${GREEN}✓ Pre-flight checks passed${NC}"
 echo ""
 
+# Check for existing installation
+echo -e "${YELLOW}Checking for existing installation...${NC}"
+EXISTING_INSTALL=false
+
+if [ -d /home/pi/.firewalla/run/docker/unifi ] || \
+   [ -d /data/unifi ] || \
+   [ -d /data/unifi-db ] || \
+   sudo docker ps -a | grep -q "unifi\|unifi-db" || \
+   sudo docker network ls | grep -q "unifi"; then
+    EXISTING_INSTALL=true
+    echo -e "${YELLOW}⚠ Existing UniFi installation detected!${NC}"
+    echo ""
+    echo "Found:"
+    [ -d /home/pi/.firewalla/run/docker/unifi ] && echo "  - Configuration files"
+    [ -d /data/unifi ] && echo "  - UniFi data directory"
+    [ -d /data/unifi-db ] && echo "  - MongoDB data directory"
+    sudo docker ps -a | grep -q "unifi\|unifi-db" && echo "  - Docker containers"
+    sudo docker network ls | grep -q "unifi" && echo "  - Docker networks"
+    echo ""
+    echo -e "${YELLOW}Options:${NC}"
+    echo "  1. Clean install (removes ALL existing data and containers)"
+    echo "  2. Cancel and run uninstall script manually"
+    echo "  3. Continue anyway (may cause conflicts)"
+    echo ""
+    read -p "Choose option [1/2/3]: " INSTALL_OPTION
+
+    case $INSTALL_OPTION in
+        1)
+            echo ""
+            echo -e "${RED}WARNING: This will delete all existing UniFi configuration and data!${NC}"
+            read -p "Type 'DELETE' to confirm: " CONFIRM_DELETE
+            if [ "$CONFIRM_DELETE" != "DELETE" ]; then
+                echo "Installation cancelled."
+                exit 0
+            fi
+
+            echo ""
+            echo -e "${YELLOW}Cleaning up existing installation...${NC}"
+
+            # Stop containers
+            if [ -f /home/pi/.firewalla/run/docker/unifi/docker-compose.yaml ]; then
+                cd /home/pi/.firewalla/run/docker/unifi
+                sudo docker-compose down -v 2>/dev/null || true
+            fi
+            sudo docker stop unifi unifi-db 2>/dev/null || true
+            sudo docker rm unifi unifi-db 2>/dev/null || true
+
+            # Remove networks
+            sudo docker network rm unifi_unifi-internal unifi_unifi-net 2>/dev/null || true
+
+            # Remove shim
+            sudo ip link delete unifi-shim 2>/dev/null || true
+
+            # Remove data
+            sudo rm -rf /data/unifi /data/unifi-db
+            sudo rm -rf /home/pi/.firewalla/run/docker/unifi
+            sudo rm -f /home/pi/.firewalla/config/post_main.d/start_unifi.sh
+
+            echo -e "${GREEN}✓ Cleanup complete${NC}"
+            echo ""
+            ;;
+        2)
+            echo ""
+            echo "Please run the uninstall script first:"
+            echo "  curl -sL \"https://raw.githubusercontent.com/dagecko/unifi-firewalla-macvlan/main/uninstall.sh\" -o /tmp/uninstall.sh"
+            echo "  bash /tmp/uninstall.sh"
+            exit 0
+            ;;
+        3)
+            echo ""
+            echo -e "${YELLOW}⚠ Continuing with existing installation present...${NC}"
+            echo ""
+            ;;
+        *)
+            echo "Invalid option. Installation cancelled."
+            exit 1
+            ;;
+    esac
+else
+    echo -e "${GREEN}✓ No existing installation found${NC}"
+fi
+echo ""
+
 # Check for Gold series
 SERIES=""
 if [ -f /etc/update-motd.d/00-header ]; then
