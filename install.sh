@@ -102,13 +102,20 @@ if [ -d /home/pi/.firewalla/run/docker/unifi ] || \
             echo ""
             echo -e "${YELLOW}Cleaning up existing installation...${NC}"
 
-            # Stop containers
+            # Stop containers and remove volumes
             if [ -f /home/pi/.firewalla/run/docker/unifi/docker-compose.yaml ]; then
                 cd /home/pi/.firewalla/run/docker/unifi
-                sudo docker-compose down -v 2>/dev/null || true
+                sudo docker-compose down -v --remove-orphans 2>/dev/null || true
+                sleep 2
             fi
+
+            # Force stop and remove any remaining containers
             sudo docker stop unifi unifi-db 2>/dev/null || true
-            sudo docker rm unifi unifi-db 2>/dev/null || true
+            sudo docker rm -f unifi unifi-db 2>/dev/null || true
+
+            # Remove any orphaned volumes
+            sudo docker volume rm unifi_unifi-db-data 2>/dev/null || true
+            sudo docker volume prune -f 2>/dev/null || true
 
             # Remove networks
             sudo docker network rm unifi_unifi-internal unifi_unifi-net 2>/dev/null || true
@@ -116,12 +123,29 @@ if [ -d /home/pi/.firewalla/run/docker/unifi ] || \
             # Remove shim
             sudo ip link delete unifi-shim 2>/dev/null || true
 
-            # Remove data
+            # Remove data directories - force complete deletion
+            echo -n "  Removing data directories... "
+            sudo rm -rf /data/unifi/* /data/unifi/.* 2>/dev/null || true
+            sudo rm -rf /data/unifi-db/* /data/unifi-db/.* 2>/dev/null || true
             sudo rm -rf /data/unifi /data/unifi-db
+
+            # Recreate empty directories
+            sudo mkdir -p /data/unifi
+            sudo mkdir -p /data/unifi-db
+
+            # Verify MongoDB directory is empty
+            if [ "$(sudo ls -A /data/unifi-db 2>/dev/null)" ]; then
+                echo -e "${RED}✗ Failed to clean MongoDB directory${NC}"
+                echo "Please manually remove: sudo rm -rf /data/unifi-db/*"
+                exit 1
+            fi
+            echo -e "${GREEN}✓${NC}"
+
+            # Remove config files
             sudo rm -rf /home/pi/.firewalla/run/docker/unifi
             sudo rm -f /home/pi/.firewalla/config/post_main.d/start_unifi.sh
 
-            echo -e "${GREEN}✓ Cleanup complete${NC}"
+            echo -e "${GREEN}✓ Cleanup complete - MongoDB directory is empty${NC}"
             echo ""
             ;;
         2)
