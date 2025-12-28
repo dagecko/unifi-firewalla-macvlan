@@ -357,9 +357,18 @@ sudo mkdir -p /home/pi/.firewalla/run/docker/unifi
 sudo mkdir -p /home/pi/.firewalla/config/post_main.d
 echo -e "${GREEN}✓${NC}"
 
-# Create MongoDB init script
+# Ensure MongoDB data directory is completely empty for init script to run
+echo -n "Ensuring clean MongoDB directory... "
+if [ "$(sudo ls -A /data/unifi-db 2>/dev/null)" ]; then
+    echo -e "${RED}✗ MongoDB directory not empty!${NC}"
+    echo "The /data/unifi-db directory must be completely empty for initialization."
+    exit 1
+fi
+echo -e "${GREEN}✓${NC}"
+
+# Create MongoDB init script in a separate location
 echo -n "Creating MongoDB init script... "
-sudo bash -c "cat > /data/unifi-db/init-mongo.js" << MONGOEOF
+sudo bash -c "cat > /home/pi/.firewalla/run/docker/unifi/init-mongo.js" << MONGOEOF
 db.getSiblingDB("unifi").createUser({
   user: "unifi",
   pwd: "$MONGO_PASSWORD",
@@ -381,7 +390,7 @@ services:
       - TZ=${TZ_SETTING}
     volumes:
       - /data/unifi-db:/data/db
-      - /data/unifi-db/init-mongo.js:/docker-entrypoint-initdb.d/init-mongo.js:ro
+      - /home/pi/.firewalla/run/docker/unifi/init-mongo.js:/docker-entrypoint-initdb.d/init-mongo.js:ro
     restart: unless-stopped
     networks:
       - unifi-internal
