@@ -398,18 +398,20 @@ echo -e "${GREEN}✓${NC}"
 
 # Create MongoDB init script in a separate location
 echo -n "Creating MongoDB init script... "
-sudo bash -c "cat > /home/pi/.firewalla/run/docker/unifi/init-mongo.js" << MONGOEOF
+sudo bash -c "cat > /home/pi/.firewalla/run/docker/unifi/init-mongo.js" << 'MONGOEOF'
 db.getSiblingDB("unifi").createUser({
   user: "unifi",
-  pwd: "$MONGO_PASSWORD",
+  pwd: "MONGO_PASSWORD_PLACEHOLDER",
   roles: [{ role: "readWrite", db: "unifi" }]
 });
 MONGOEOF
+# Replace placeholder with actual password using sed to avoid shell expansion
+sudo sed -i "s|MONGO_PASSWORD_PLACEHOLDER|${MONGO_PASSWORD}|g" /home/pi/.firewalla/run/docker/unifi/init-mongo.js
 echo -e "${GREEN}✓${NC}"
 
 # Create docker-compose.yaml with hybrid networking
 echo -n "Creating docker-compose.yaml... "
-sudo bash -c "cat > /home/pi/.firewalla/run/docker/unifi/docker-compose.yaml" << EOF
+sudo bash -c "cat > /home/pi/.firewalla/run/docker/unifi/docker-compose.yaml" << 'EOF'
 version: "3.8"
 
 services:
@@ -417,7 +419,7 @@ services:
     image: docker.io/mongo:4.4
     container_name: unifi-db
     environment:
-      - TZ=${TZ_SETTING}
+      - TZ=TZ_SETTING_PLACEHOLDER
     volumes:
       - /data/unifi-db:/data/db
       - /home/pi/.firewalla/run/docker/unifi/init-mongo.js:/docker-entrypoint-initdb.d/init-mongo.js:ro
@@ -433,9 +435,9 @@ services:
     environment:
       - PUID=1000
       - PGID=1000
-      - TZ=${TZ_SETTING}
+      - TZ=TZ_SETTING_PLACEHOLDER
       - MONGO_USER=unifi
-      - MONGO_PASS=${MONGO_PASSWORD}
+      - MONGO_PASS=MONGO_PASSWORD_PLACEHOLDER
       - MONGO_HOST=unifi-db
       - MONGO_PORT=27017
       - MONGO_DBNAME=unifi
@@ -445,7 +447,7 @@ services:
     networks:
       unifi-internal:
       unifi-net:
-        ipv4_address: ${CONTROLLER_IP}
+        ipv4_address: CONTROLLER_IP_PLACEHOLDER
 
 networks:
   unifi-internal:
@@ -458,10 +460,18 @@ networks:
       parent: br0
     ipam:
       config:
-        - subnet: ${NETWORK_BASE}/${NETWORK_CIDR}
-          gateway: ${GATEWAY_IP}
-          ip_range: ${CONTROLLER_IP}${IP_RANGE_CIDR}
+        - subnet: NETWORK_BASE_PLACEHOLDER/NETWORK_CIDR_PLACEHOLDER
+          gateway: GATEWAY_IP_PLACEHOLDER
+          ip_range: CONTROLLER_IP_PLACEHOLDERIP_RANGE_CIDR_PLACEHOLDER
 EOF
+# Replace all placeholders with actual values using sed to avoid shell expansion
+sudo sed -i "s|TZ_SETTING_PLACEHOLDER|${TZ_SETTING}|g" /home/pi/.firewalla/run/docker/unifi/docker-compose.yaml
+sudo sed -i "s|MONGO_PASSWORD_PLACEHOLDER|${MONGO_PASSWORD}|g" /home/pi/.firewalla/run/docker/unifi/docker-compose.yaml
+sudo sed -i "s|CONTROLLER_IP_PLACEHOLDER|${CONTROLLER_IP}|g" /home/pi/.firewalla/run/docker/unifi/docker-compose.yaml
+sudo sed -i "s|NETWORK_BASE_PLACEHOLDER|${NETWORK_BASE}|g" /home/pi/.firewalla/run/docker/unifi/docker-compose.yaml
+sudo sed -i "s|NETWORK_CIDR_PLACEHOLDER|${NETWORK_CIDR}|g" /home/pi/.firewalla/run/docker/unifi/docker-compose.yaml
+sudo sed -i "s|GATEWAY_IP_PLACEHOLDER|${GATEWAY_IP}|g" /home/pi/.firewalla/run/docker/unifi/docker-compose.yaml
+sudo sed -i "s|IP_RANGE_CIDR_PLACEHOLDER|${IP_RANGE_CIDR}|g" /home/pi/.firewalla/run/docker/unifi/docker-compose.yaml
 echo -e "${GREEN}✓${NC}"
 
 # Create startup script for persistence
