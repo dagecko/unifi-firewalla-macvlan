@@ -256,6 +256,16 @@ fi
 echo ""
 echo -e "${GREEN}Starting installation...${NC}"
 
+# Clean up any leftover networks from previous failed installations
+echo -n "Checking for leftover networks... "
+if sudo docker network ls | grep -q "unifi_unifi-internal\|unifi_unifi-net"; then
+    sudo docker network rm unifi_unifi-internal 2>/dev/null || true
+    sudo docker network rm unifi_unifi-net 2>/dev/null || true
+    echo -e "${GREEN}✓ Cleaned${NC}"
+else
+    echo -e "${GREEN}✓ None found${NC}"
+fi
+
 # Create directories
 echo -n "Creating directories... "
 sudo mkdir -p /data/unifi
