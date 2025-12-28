@@ -109,6 +109,13 @@ if [ -d /home/pi/.firewalla/run/docker/unifi ] || \
                 sleep 2
             fi
 
+            # Drop MongoDB user if container is running
+            if sudo docker ps -q -f name=unifi-db 2>/dev/null | grep -q .; then
+                echo -n "  Dropping MongoDB users... "
+                sudo docker exec unifi-db mongo admin --quiet --eval "db.getSiblingDB('unifi').dropUser('unifi')" 2>/dev/null || true
+                echo -e "${GREEN}✓${NC}"
+            fi
+
             # Force stop and remove any remaining containers
             sudo docker stop unifi unifi-db 2>/dev/null || true
             sudo docker rm -f unifi unifi-db 2>/dev/null || true
