@@ -405,8 +405,9 @@ db.getSiblingDB("unifi").createUser({
   roles: [{ role: "readWrite", db: "unifi" }]
 });
 MONGOEOF
-# Replace placeholder with actual password using sed to avoid shell expansion
-sudo sed -i "s|MONGO_PASSWORD_PLACEHOLDER|${MONGO_PASSWORD}|g" /home/pi/.firewalla/run/docker/unifi/init-mongo.js
+# Replace placeholder with actual password - escape special characters for sed
+ESCAPED_PASSWORD=$(printf '%s\n' "$MONGO_PASSWORD" | sed 's/[&/\]/\\&/g')
+sudo sed -i "s|MONGO_PASSWORD_PLACEHOLDER|${ESCAPED_PASSWORD}|g" /home/pi/.firewalla/run/docker/unifi/init-mongo.js
 echo -e "${GREEN}✓${NC}"
 
 # Create docker-compose.yaml with hybrid networking
@@ -464,9 +465,9 @@ networks:
           gateway: GATEWAY_IP_PLACEHOLDER
           ip_range: CONTROLLER_IP_PLACEHOLDERIP_RANGE_CIDR_PLACEHOLDER
 EOF
-# Replace all placeholders with actual values using sed to avoid shell expansion
+# Replace all placeholders with actual values - password already escaped above
 sudo sed -i "s|TZ_SETTING_PLACEHOLDER|${TZ_SETTING}|g" /home/pi/.firewalla/run/docker/unifi/docker-compose.yaml
-sudo sed -i "s|MONGO_PASSWORD_PLACEHOLDER|${MONGO_PASSWORD}|g" /home/pi/.firewalla/run/docker/unifi/docker-compose.yaml
+sudo sed -i "s|MONGO_PASSWORD_PLACEHOLDER|${ESCAPED_PASSWORD}|g" /home/pi/.firewalla/run/docker/unifi/docker-compose.yaml
 sudo sed -i "s|CONTROLLER_IP_PLACEHOLDER|${CONTROLLER_IP}|g" /home/pi/.firewalla/run/docker/unifi/docker-compose.yaml
 sudo sed -i "s|NETWORK_BASE_PLACEHOLDER|${NETWORK_BASE}|g" /home/pi/.firewalla/run/docker/unifi/docker-compose.yaml
 sudo sed -i "s|NETWORK_CIDR_PLACEHOLDER|${NETWORK_CIDR}|g" /home/pi/.firewalla/run/docker/unifi/docker-compose.yaml
