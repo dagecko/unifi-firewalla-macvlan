@@ -422,13 +422,15 @@ ESCAPED_PASSWORD=$(printf '%s\n' "$MONGO_PASSWORD" | sed 's/[&/\]/\\&/g')
 sudo sed -i "s|MONGO_PASSWORD_PLACEHOLDER|${ESCAPED_PASSWORD}|g" /home/pi/.firewalla/run/docker/unifi/init-mongo.js
 echo -e "${GREEN}✓${NC}"
 
-# Create .env file with password (safer than embedding in YAML)
+# Create .env file with URL-encoded password per LinuxServer.io documentation
 # TODO: Future enhancement - support AWS Secrets Manager and other secret stores
 echo -n "Creating environment file... "
-sudo bash -c "cat > /home/pi/.firewalla/run/docker/unifi/.env" << 'ENVEOF'
-MONGO_PASSWORD=MONGO_PASSWORD_PLACEHOLDER
+# URL encode the password - LinuxServer.io requires special characters to be URL encoded
+URL_ENCODED_PASS=$(python3 -c "import urllib.parse; print(urllib.parse.quote('${MONGO_PASSWORD}', safe=''))" 2>/dev/null || \
+                   printf '%s' "${MONGO_PASSWORD}" | sed 's/!/%21/g; s/#/%23/g; s/\$/%24/g; s/&/%26/g; s/\^/%5E/g; s/\*/%2A/g')
+sudo bash -c "cat > /home/pi/.firewalla/run/docker/unifi/.env" << ENVEOF
+MONGO_PASSWORD=${URL_ENCODED_PASS}
 ENVEOF
-sudo sed -i "s|MONGO_PASSWORD_PLACEHOLDER|${ESCAPED_PASSWORD}|g" /home/pi/.firewalla/run/docker/unifi/.env
 sudo chmod 600 /home/pi/.firewalla/run/docker/unifi/.env
 echo -e "${GREEN}✓${NC}"
 
@@ -562,16 +564,6 @@ for i in {1..30}; do
     fi
 done
 echo ""
-
-# Fix system.properties - URL encode the password to avoid sed corruption in container
-echo -n "Fixing MongoDB connection string... "
-# URL encode special characters in password
-URL_ENCODED_PASS=$(python3 -c "import urllib.parse; print(urllib.parse.quote('${MONGO_PASSWORD}', safe=''))" 2>/dev/null || \
-                   printf '%s' "${MONGO_PASSWORD}" | sed 's/!/%21/g; s/#/%23/g; s/\$/%24/g; s/&/%26/g; s/\^/%5E/g')
-sudo docker exec unifi sed -i "s|mongodb://unifi:[^@]*@|mongodb://unifi:${URL_ENCODED_PASS}@|g" /config/data/system.properties 2>/dev/null || true
-sudo docker restart unifi >/dev/null 2>&1
-sleep 5
-echo -e "${GREEN}✓${NC}"
 
 # Check final status
 echo ""
