@@ -1,0 +1,22 @@
+# Local test configurations
+install-config.txt
+*.bak
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+.vscode/
+.idea/
+*.sublime-*
+
+# Testing
+test/
+local-test/
+
+# Backup files
+*.backup
