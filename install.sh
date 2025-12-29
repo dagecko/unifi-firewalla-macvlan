@@ -252,21 +252,36 @@ echo
 if [[ $USE_CUSTOM_NETWORK =~ ^[Yy]$ ]]; then
     while true; do
         read -p "Enter network (e.g., 192.168.50.0/24): " CUSTOM_NETWORK
-        if [[ $CUSTOM_NETWORK =~ ^[0-9]+\.[0-9]+\.[0-9]+\.0/[0-9]+$ ]]; then
+        if [[ $CUSTOM_NETWORK =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+$ ]]; then
             NETWORK_CIDR="${CUSTOM_NETWORK#*/}"
-            NETWORK_BASE="${CUSTOM_NETWORK%/*}"
-            IFS='.' read -r n1 n2 n3 n4 <<< "$NETWORK_BASE"
+            NETWORK_IP="${CUSTOM_NETWORK%/*}"
+
+            # Validate CIDR is reasonable (8-30)
+            if [ "$NETWORK_CIDR" -lt 8 ] || [ "$NETWORK_CIDR" -gt 30 ]; then
+                echo -e "${RED}Invalid CIDR. Use /8 to /30 (e.g., /24)${NC}"
+                continue
+            fi
+
+            # Extract network prefix from any IP in the subnet
+            IFS='.' read -r n1 n2 n3 n4 <<< "$NETWORK_IP"
             NETWORK_PREFIX="${n1}.${n2}.${n3}"
+            NETWORK_BASE="${NETWORK_PREFIX}.0"
 
             read -p "Enter gateway IP for this network (e.g., ${NETWORK_PREFIX}.1): " CUSTOM_GATEWAY
             if [[ $CUSTOM_GATEWAY =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-                GATEWAY_IP="$CUSTOM_GATEWAY"
-                break
+                # Verify gateway is in the same /24 subnet
+                IFS='.' read -r g1 g2 g3 g4 <<< "$CUSTOM_GATEWAY"
+                if [ "$g1" = "$n1" ] && [ "$g2" = "$n2" ] && [ "$g3" = "$n3" ]; then
+                    GATEWAY_IP="$CUSTOM_GATEWAY"
+                    break
+                else
+                    echo -e "${RED}Gateway must be in the ${NETWORK_PREFIX}.0/${NETWORK_CIDR} subnet${NC}"
+                fi
             else
                 echo -e "${RED}Invalid gateway IP format. Please try again.${NC}"
             fi
         else
-            echo -e "${RED}Invalid network format. Use format: 192.168.1.0/24${NC}"
+            echo -e "${RED}Invalid format. Use: 192.168.1.0/24 or 192.168.1.1/24${NC}"
         fi
     done
 else
