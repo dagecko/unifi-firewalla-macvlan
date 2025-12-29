@@ -268,6 +268,11 @@ if [[ $USE_CUSTOM_NETWORK =~ ^[Yy]$ ]]; then
             NETWORK_BASE="${NETWORK_PREFIX}.0"
 
             read -p "Enter gateway IP for this network (e.g., ${NETWORK_PREFIX}.1): " CUSTOM_GATEWAY
+            # Default to .1 if empty
+            if [ -z "$CUSTOM_GATEWAY" ]; then
+                CUSTOM_GATEWAY="${NETWORK_PREFIX}.1"
+            fi
+
             if [[ $CUSTOM_GATEWAY =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
                 # Verify gateway is in the same /24 subnet
                 IFS='.' read -r g1 g2 g3 g4 <<< "$CUSTOM_GATEWAY"
