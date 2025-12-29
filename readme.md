@@ -35,7 +35,27 @@ Internal Docker Network (not exposed to network):
 
 ## Screenshots
 
-*Coming soon: Screenshots showing installation process, network configuration, and UniFi setup wizard.*
+### Installation Process
+
+![Installation start](screenshots/install-start.png)
+*Starting the installation script*
+
+![Network selection](screenshots/network-selection.png)
+*Selecting network configuration*
+
+![MongoDB and shim setup](screenshots/mongo_and_shim.png)
+*Configuring MongoDB password and shim interface*
+
+![Configuration summary](screenshots/config_summary.png)
+*Reviewing configuration before installation*
+
+![Installation complete](screenshots/install_completed.png)
+*Installation completed successfully*
+
+### UniFi Controller Setup
+
+![UniFi setup wizard](screenshots/unifi_controller_ui.png)
+*UniFi Network Application setup wizard*
 
 ## Quick Install
 
