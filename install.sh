@@ -604,7 +604,7 @@ fi
 
 echo ""
 echo -e "${GREEN}╔═══════════════════════════════════════════════════════════════╗${NC}"
-echo -e "${GREEN}║                  Installation Complete!                     ║${NC}"
+echo -e "${GREEN}║                  Installation Complete!                       ║${NC}"
 echo -e "${GREEN}╚═══════════════════════════════════════════════════════════════╝${NC}"
 echo ""
 echo -e "Access the UniFi Controller at:"
