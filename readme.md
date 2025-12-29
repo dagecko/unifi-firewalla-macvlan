@@ -33,6 +33,10 @@ Internal Docker Network (not exposed to network):
         └── MongoDB ← only accessible by UniFi Controller
 ```
 
+## Screenshots
+
+*Coming soon: Screenshots showing installation process, network configuration, and UniFi setup wizard.*
+
 ## Quick Install
 
 SSH into your Firewalla and run:
@@ -49,17 +53,44 @@ bash /tmp/install.sh
 ```
 
 The script will prompt you for:
+- Network selection (use existing network or specify custom)
 - Controller IP address
-- MongoDB password (for internal use only)
+- MongoDB password (for internal use only - supports any special characters)
 - Number of IPs to reserve (if you plan to add more containers)
 - Timezone
-- Optional: Shim interface for host access
+- Optional: Shim interface for host access to controller from Firewalla
+
+**Note:** After installation completes, the UniFi Controller may take 2-5 minutes to fully start up and become accessible.
 
 ## Manual Install
 
 See [manual-install.md](manual-install.md) for step-by-step instructions.
 
-## Post-Install: Migrating from UDM/Cloud Key
+## Post-Install
+
+### First Access
+
+Wait 2-5 minutes after installation for the UniFi Controller to fully start, then access it at:
+
+```
+https://<controller-ip>:8443
+```
+
+**From external devices (laptop, phone):** Direct access works immediately
+```bash
+# Example from your laptop
+curl -k https://192.168.240.2:8443
+```
+
+**From Firewalla host (if shim enabled):** Must use the shim interface
+```bash
+# Example from Firewalla SSH session
+curl -k --interface unifi-shim https://192.168.240.2:8443
+```
+
+You'll see a certificate warning (self-signed certificate) - this is expected.
+
+### Migrating from UDM/Cloud Key
 
 1. Access the controller at `https://<controller-ip>:8443`
 2. During setup, choose **"Restore from backup"**
@@ -105,9 +136,15 @@ sudo rm -f /home/pi/.firewalla/config/post_main.d/start_unifi.sh
 
 ### Macvlan Limitation
 
-Due to how macvlan works, the Firewalla host cannot directly communicate with the UniFi Controller container. This is expected behavior. Access the controller from any other device on the management network.
+Due to how macvlan works, the Firewalla host cannot directly communicate with containers on the macvlan network without a shim interface. This is expected Linux kernel behavior, not a bug.
 
-If you need to access the controller from Firewalla itself (for health checks, API access, or monitoring), enable the shim interface during installation or see [advanced.md](advanced.md) for manual setup.
+**What this means:**
+- ✅ External devices (laptops, phones, tablets) can access the controller directly at `https://192.168.240.2:8443`
+- ✅ UniFi devices on the network can communicate with the controller normally
+- ❌ Firewalla host cannot access the controller with regular `curl https://192.168.240.2:8443`
+- ✅ **With shim enabled:** Firewalla host can access via `curl --interface unifi-shim https://192.168.240.2:8443`
+
+If you need to access the controller from Firewalla itself (for health checks, API access, or monitoring scripts), enable the shim interface during installation or see [advanced.md](advanced.md) for manual setup.
 
 ### Network Security
 
