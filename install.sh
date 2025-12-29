@@ -489,6 +489,9 @@ services:
     volumes:
       - /data/unifi:/config
     restart: unless-stopped
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
     networks:
       unifi-internal:
       unifi-net:
@@ -528,8 +531,13 @@ sleep 5
 cd /home/pi/.firewalla/run/docker/unifi
 sudo docker-compose up -d
 
-# Create shim interface for host access to containers
+# Configure Firewalla routing for Docker internet access
 sleep 10
+BRIDGE_ID=\\\$(sudo docker network inspect unifi_unifi-internal | grep '"Id"' | head -1 | cut -d'"' -f4 | cut -c1-12)
+SUBNET=\\\$(sudo docker network inspect unifi_unifi-internal | grep '"Subnet"' | head -1 | cut -d'"' -f4)
+sudo ip route add \\\$SUBNET dev br-\\\$BRIDGE_ID table wan_routable 2>/dev/null || true
+
+# Create shim interface for host access to containers
 sudo ip link add unifi-shim link br0 type macvlan mode bridge 2>/dev/null || true
 sudo ip addr add ${SHIM_IP}/32 dev unifi-shim 2>/dev/null || true
 sudo ip link set unifi-shim up 2>/dev/null || true
@@ -542,6 +550,12 @@ sudo systemctl start docker
 sleep 5
 cd /home/pi/.firewalla/run/docker/unifi
 sudo docker-compose up -d
+
+# Configure Firewalla routing for Docker internet access
+sleep 10
+BRIDGE_ID=$(sudo docker network inspect unifi_unifi-internal | grep '"Id"' | head -1 | cut -d'"' -f4 | cut -c1-12)
+SUBNET=$(sudo docker network inspect unifi_unifi-internal | grep '"Subnet"' | head -1 | cut -d'"' -f4)
+sudo ip route add $SUBNET dev br-$BRIDGE_ID table wan_routable 2>/dev/null || true
 EOF
 fi
 sudo chmod +x /home/pi/.firewalla/config/post_main.d/start_unifi.sh
@@ -590,6 +604,14 @@ echo ""
 echo -e "${YELLOW}Container Status${NC}"
 echo "─────────────────────────────────────────────────────────────────"
 sudo docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" | grep -E "NAMES|unifi"
+
+# Configure Firewalla routing for Docker internet access
+echo ""
+echo -n "Configuring internet access for containers... "
+BRIDGE_ID=$(sudo docker network inspect unifi_unifi-internal | grep '"Id"' | head -1 | cut -d'"' -f4 | cut -c1-12)
+SUBNET=$(sudo docker network inspect unifi_unifi-internal | grep '"Subnet"' | head -1 | cut -d'"' -f4)
+sudo ip route add $SUBNET dev br-$BRIDGE_ID table wan_routable 2>/dev/null || true
+echo -e "${GREEN}✓${NC}"
 
 # Set up shim interface if enabled
 if [ -n "$SHIM_IP" ]; then
