@@ -209,93 +209,104 @@ echo ""
 # Detect available networks on Firewalla
 echo "Detecting available networks..."
 echo ""
-echo -e "${YELLOW}Available Networks on Firewalla:${NC}"
-ip -4 -br addr show | grep -v "127.0.0.1" | grep -v "docker" | awk '{
-    iface = $1;
-    state = $2;
-    ip_cidr = $3;
-    if (ip_cidr != "") {
-        split(ip_cidr, parts, "/");
-        ip = parts[1];
-        cidr = parts[2];
-        split(ip, octets, ".");
-        network = octets[1] "." octets[2] "." octets[3] ".0/" cidr;
-        printf "  %-15s %-10s %-18s %s\n", iface, state, ip, network;
-    }
-}'
 
-echo ""
-echo -e "${YELLOW}Network Selection${NC}"
-echo "You can use an existing network or specify a custom one."
-echo ""
+# Build arrays of network information
+declare -a INTERFACES
+declare -a GATEWAYS
+declare -a NETWORKS
+INDEX=0
 
-# Get br0 IP as default suggestion
-DETECTED_IP=$(ip addr show br0 2>/dev/null | grep "inet " | awk '{print $2}' | cut -d/ -f1 || echo "")
-DETECTED_CIDR=$(ip addr show br0 2>/dev/null | grep "inet " | awk '{print $2}' | cut -d/ -f2 || echo "24")
+while IFS= read -r line; do
+    IFACE=$(echo "$line" | awk '{print $1}')
+    IP_CIDR=$(echo "$line" | awk '{print $3}')
 
-if [ -z "$DETECTED_IP" ]; then
-    echo -e "${RED}Error: Could not detect IP address on br0 interface.${NC}"
+    if [ -n "$IP_CIDR" ]; then
+        IP=$(echo "$IP_CIDR" | cut -d'/' -f1)
+        CIDR=$(echo "$IP_CIDR" | cut -d'/' -f2)
+        IFS='.' read -r o1 o2 o3 o4 <<< "$IP"
+        NETWORK="${o1}.${o2}.${o3}.0/${CIDR}"
+
+        INTERFACES[$INDEX]="$IFACE"
+        GATEWAYS[$INDEX]="$IP"
+        NETWORKS[$INDEX]="$NETWORK"
+        INDEX=$((INDEX + 1))
+    fi
+done < <(ip -4 -br addr show | grep -v "127.0.0.1" | grep -v "docker")
+
+if [ ${#INTERFACES[@]} -eq 0 ]; then
+    echo -e "${RED}Error: No networks detected on Firewalla${NC}"
     exit 1
 fi
 
-# Extract network prefix and calculate subnet
-IFS='.' read -r o1 o2 o3 o4 <<< "$DETECTED_IP"
-DEFAULT_NETWORK="${o1}.${o2}.${o3}.0/${DETECTED_CIDR}"
-DEFAULT_GATEWAY="${DETECTED_IP}"
+echo -e "${YELLOW}Available Networks:${NC}"
+for i in "${!INTERFACES[@]}"; do
+    NUM=$((i + 1))
+    printf "  ${GREEN}%2d.${NC} %-10s  Gateway: %-16s  Network: %s\n" "$NUM" "${INTERFACES[$i]}" "${GATEWAYS[$i]}" "${NETWORKS[$i]}"
+done
 
-echo -e "Default network (br0): ${GREEN}${DEFAULT_NETWORK}${NC}"
-echo -e "Default gateway: ${GREEN}${DEFAULT_GATEWAY}${NC}"
+echo ""
+echo -e "${YELLOW}Network Selection${NC}"
+echo "Select a network for the UniFi Controller or enter 0 for custom."
 echo ""
 
-# Network selection
-read -p "Use a different network? (y/N): " -n 1 -r USE_CUSTOM_NETWORK
-echo
-if [[ $USE_CUSTOM_NETWORK =~ ^[Yy]$ ]]; then
-    while true; do
-        read -p "Enter network (e.g., 192.168.50.0/24): " CUSTOM_NETWORK
-        if [[ $CUSTOM_NETWORK =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+$ ]]; then
-            NETWORK_CIDR="${CUSTOM_NETWORK#*/}"
-            NETWORK_IP="${CUSTOM_NETWORK%/*}"
+while true; do
+    read -p "Enter selection [1-${#INTERFACES[@]}] or 0 for custom: " SELECTION
 
-            # Validate CIDR is reasonable (8-30)
-            if [ "$NETWORK_CIDR" -lt 8 ] || [ "$NETWORK_CIDR" -gt 30 ]; then
-                echo -e "${RED}Invalid CIDR. Use /8 to /30 (e.g., /24)${NC}"
-                continue
-            fi
+    if [[ "$SELECTION" =~ ^[0-9]+$ ]]; then
+        if [ "$SELECTION" -eq 0 ]; then
+            # Custom network entry
+            while true; do
+                read -p "Enter network (e.g., 192.168.50.0/24): " CUSTOM_NETWORK
+                if [[ $CUSTOM_NETWORK =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+$ ]]; then
+                    NETWORK_CIDR="${CUSTOM_NETWORK#*/}"
+                    NETWORK_IP="${CUSTOM_NETWORK%/*}"
 
-            # Extract network prefix from any IP in the subnet
-            IFS='.' read -r n1 n2 n3 n4 <<< "$NETWORK_IP"
+                    if [ "$NETWORK_CIDR" -lt 8 ] || [ "$NETWORK_CIDR" -gt 30 ]; then
+                        echo -e "${RED}Invalid CIDR. Use /8 to /30 (e.g., /24)${NC}"
+                        continue
+                    fi
+
+                    IFS='.' read -r n1 n2 n3 n4 <<< "$NETWORK_IP"
+                    NETWORK_PREFIX="${n1}.${n2}.${n3}"
+                    NETWORK_BASE="${NETWORK_PREFIX}.0"
+
+                    read -p "Enter gateway IP (e.g., ${NETWORK_PREFIX}.1): " CUSTOM_GATEWAY
+                    if [ -z "$CUSTOM_GATEWAY" ]; then
+                        CUSTOM_GATEWAY="${NETWORK_PREFIX}.1"
+                    fi
+
+                    if [[ $CUSTOM_GATEWAY =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+                        IFS='.' read -r g1 g2 g3 g4 <<< "$CUSTOM_GATEWAY"
+                        if [ "$g1" = "$n1" ] && [ "$g2" = "$n2" ] && [ "$g3" = "$n3" ]; then
+                            GATEWAY_IP="$CUSTOM_GATEWAY"
+                            break 2
+                        else
+                            echo -e "${RED}Gateway must be in the ${NETWORK_PREFIX}.0/${NETWORK_CIDR} subnet${NC}"
+                        fi
+                    else
+                        echo -e "${RED}Invalid gateway IP format${NC}"
+                    fi
+                else
+                    echo -e "${RED}Invalid format. Use: 192.168.1.0/24${NC}"
+                fi
+            done
+        elif [ "$SELECTION" -ge 1 ] && [ "$SELECTION" -le ${#INTERFACES[@]} ]; then
+            # Valid selection
+            ARRAY_INDEX=$((SELECTION - 1))
+            GATEWAY_IP="${GATEWAYS[$ARRAY_INDEX]}"
+            IFS='.' read -r n1 n2 n3 n4 <<< "$GATEWAY_IP"
             NETWORK_PREFIX="${n1}.${n2}.${n3}"
             NETWORK_BASE="${NETWORK_PREFIX}.0"
-
-            read -p "Enter gateway IP for this network (e.g., ${NETWORK_PREFIX}.1): " CUSTOM_GATEWAY
-            # Default to .1 if empty
-            if [ -z "$CUSTOM_GATEWAY" ]; then
-                CUSTOM_GATEWAY="${NETWORK_PREFIX}.1"
-            fi
-
-            if [[ $CUSTOM_GATEWAY =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-                # Verify gateway is in the same /24 subnet
-                IFS='.' read -r g1 g2 g3 g4 <<< "$CUSTOM_GATEWAY"
-                if [ "$g1" = "$n1" ] && [ "$g2" = "$n2" ] && [ "$g3" = "$n3" ]; then
-                    GATEWAY_IP="$CUSTOM_GATEWAY"
-                    break
-                else
-                    echo -e "${RED}Gateway must be in the ${NETWORK_PREFIX}.0/${NETWORK_CIDR} subnet${NC}"
-                fi
-            else
-                echo -e "${RED}Invalid gateway IP format. Please try again.${NC}"
-            fi
+            # Extract CIDR from selected network
+            NETWORK_CIDR=$(echo "${NETWORKS[$ARRAY_INDEX]}" | cut -d'/' -f2)
+            break
         else
-            echo -e "${RED}Invalid format. Use: 192.168.1.0/24 or 192.168.1.1/24${NC}"
+            echo -e "${RED}Invalid selection. Please enter a number between 0 and ${#INTERFACES[@]}${NC}"
         fi
-    done
-else
-    NETWORK_CIDR="$DETECTED_CIDR"
-    NETWORK_BASE="${o1}.${o2}.${o3}.0"
-    NETWORK_PREFIX="${o1}.${o2}.${o3}"
-    GATEWAY_IP="$DEFAULT_GATEWAY"
-fi
+    else
+        echo -e "${RED}Invalid input. Please enter a number.${NC}"
+    fi
+done
 
 # Detect which bridge interface has this gateway IP
 echo -n "Detecting network interface... "
