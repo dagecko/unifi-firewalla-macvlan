@@ -520,14 +520,14 @@ services:
     networks:
       unifi-net:
         ipv4_address: CONTROLLER_IP_PLACEHOLDER
-        priority: 1000
       unifi-internal:
-        priority: 100
 
 networks:
   unifi-internal:
     driver: bridge
-    internal: true
+    ipam:
+      config:
+        - subnet: 172.31.48.0/20
 
   unifi-net:
     driver: macvlan
