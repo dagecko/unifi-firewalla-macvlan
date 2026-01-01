@@ -518,16 +518,14 @@ services:
       - 1.1.1.1
       - 8.8.8.8
     networks:
+      unifi-internal:
       unifi-net:
         ipv4_address: CONTROLLER_IP_PLACEHOLDER
-      unifi-internal:
 
 networks:
   unifi-internal:
     driver: bridge
-    ipam:
-      config:
-        - subnet: 172.31.48.0/20
+    internal: false
 
   unifi-net:
     driver: macvlan
