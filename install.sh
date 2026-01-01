@@ -527,7 +527,7 @@ services:
 networks:
   unifi-internal:
     driver: bridge
-    internal: false
+    internal: true
 
   unifi-net:
     driver: macvlan
