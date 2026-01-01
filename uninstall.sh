@@ -58,8 +58,14 @@ sudo docker network rm unifi_unifi-net 2>/dev/null && echo -e "${GREEN}✓ unifi
 
 echo ""
 echo -e "${YELLOW}Removing shim interface and routes...${NC}"
-sudo ip route del $(ip route | grep "dev unifi-shim" | head -1 | awk '{print $1}') dev unifi-shim 2>/dev/null || true
-sudo ip route del $(ip route | grep "dev unifi-shim" | head -1 | awk '{print $1}') dev unifi-shim table lan_routable 2>/dev/null || true
+# Remove all routes using unifi-shim from main table
+while read -r route; do
+    [ -n "$route" ] && sudo ip route del $route 2>/dev/null || true
+done < <(ip route | grep "dev unifi-shim")
+# Remove all routes using unifi-shim from lan_routable table
+while read -r route; do
+    [ -n "$route" ] && sudo ip route del $route table lan_routable 2>/dev/null || true
+done < <(ip route show table lan_routable | grep "dev unifi-shim")
 sudo ip link delete unifi-shim 2>/dev/null && echo -e "${GREEN}✓ Shim interface and routes removed${NC}" || echo -e "${YELLOW}⚠ Shim interface not found${NC}"
 
 echo ""
