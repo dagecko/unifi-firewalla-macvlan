@@ -356,8 +356,8 @@ DEFAULT_TZ="America/New_York"
 read -p "Timezone [${DEFAULT_TZ}]: " TZ_SETTING
 TZ_SETTING=${TZ_SETTING:-$DEFAULT_TZ}
 
-# Gateway (Firewalla IP)
-GATEWAY_IP="$DETECTED_IP"
+# Gateway IP is already set in the network selection section above
+# Don't override it here
 
 # Shim interface for host access
 DEFAULT_SHIM_IP="${NETWORK_PREFIX}.254"
