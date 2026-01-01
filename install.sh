@@ -297,10 +297,23 @@ else
     GATEWAY_IP="$DEFAULT_GATEWAY"
 fi
 
+# Detect which bridge interface has this gateway IP
+echo -n "Detecting network interface... "
+PARENT_INTERFACE=$(ip -4 -br addr show | grep "${GATEWAY_IP}/" | awk '{print $1}' | head -1)
+if [ -z "$PARENT_INTERFACE" ]; then
+    echo -e "${RED}✗${NC}"
+    echo -e "${RED}Error: Could not find interface with IP ${GATEWAY_IP}${NC}"
+    echo "Available interfaces:"
+    ip -4 -br addr show | grep -v "127.0.0.1"
+    exit 1
+fi
+echo -e "${GREEN}${PARENT_INTERFACE}${NC}"
+
 echo ""
 echo -e "${YELLOW}Selected Network Configuration:${NC}"
-echo -e "  Network:  ${GREEN}${NETWORK_BASE}/${NETWORK_CIDR}${NC}"
-echo -e "  Gateway:  ${GREEN}${GATEWAY_IP}${NC}"
+echo -e "  Interface: ${GREEN}${PARENT_INTERFACE}${NC}"
+echo -e "  Network:   ${GREEN}${NETWORK_BASE}/${NETWORK_CIDR}${NC}"
+echo -e "  Gateway:   ${GREEN}${GATEWAY_IP}${NC}"
 echo ""
 
 # Configuration prompts
@@ -377,7 +390,7 @@ fi
 echo ""
 echo -e "${YELLOW}Configuration Summary${NC}"
 echo "─────────────────────────────────────────────────────────────────"
-echo -e "  Network Interface:    br0"
+echo -e "  Network Interface:    ${PARENT_INTERFACE}"
 echo -e "  Network:              ${NETWORK_BASE}/${NETWORK_CIDR}"
 echo -e "  Gateway:              ${GATEWAY_IP}"
 echo -e "  UniFi Controller:     ${CONTROLLER_IP}"
@@ -506,7 +519,7 @@ networks:
   unifi-net:
     driver: macvlan
     driver_opts:
-      parent: br0
+      parent: PARENT_INTERFACE_PLACEHOLDER
     ipam:
       config:
         - subnet: NETWORK_BASE_PLACEHOLDER/NETWORK_CIDR_PLACEHOLDER
@@ -520,6 +533,7 @@ sudo sed -i "s|NETWORK_BASE_PLACEHOLDER|${NETWORK_BASE}|g" /home/pi/.firewalla/r
 sudo sed -i "s|NETWORK_CIDR_PLACEHOLDER|${NETWORK_CIDR}|g" /home/pi/.firewalla/run/docker/unifi/docker-compose.yaml
 sudo sed -i "s|GATEWAY_IP_PLACEHOLDER|${GATEWAY_IP}|g" /home/pi/.firewalla/run/docker/unifi/docker-compose.yaml
 sudo sed -i "s|IP_RANGE_CIDR_PLACEHOLDER|${IP_RANGE_CIDR}|g" /home/pi/.firewalla/run/docker/unifi/docker-compose.yaml
+sudo sed -i "s|PARENT_INTERFACE_PLACEHOLDER|${PARENT_INTERFACE}|g" /home/pi/.firewalla/run/docker/unifi/docker-compose.yaml
 echo -e "${GREEN}✓${NC}"
 
 # Create startup script for persistence
