@@ -568,6 +568,7 @@ sudo ip link add unifi-shim link ${PARENT_INTERFACE} type macvlan mode bridge 2>
 sudo ip addr add ${SHIM_IP}/32 dev unifi-shim 2>/dev/null || true
 sudo ip link set unifi-shim up 2>/dev/null || true
 sudo ip route add ${CONTROLLER_IP}/32 dev unifi-shim 2>/dev/null || true
+sudo ip route add ${CONTROLLER_IP}/32 dev unifi-shim table lan_routable 2>/dev/null || true
 EOF
 else
 sudo bash -c "cat > /home/pi/.firewalla/config/post_main.d/start_unifi.sh" << 'EOF'
@@ -647,6 +648,7 @@ if [ -n "$SHIM_IP" ]; then
     sudo ip addr add ${SHIM_IP}/32 dev unifi-shim 2>/dev/null || true
     sudo ip link set unifi-shim up 2>/dev/null || true
     sudo ip route add ${CONTROLLER_IP}/32 dev unifi-shim 2>/dev/null || true
+    sudo ip route add ${CONTROLLER_IP}/32 dev unifi-shim table lan_routable 2>/dev/null || true
     echo -e "${GREEN}✓${NC}"
 fi
 
