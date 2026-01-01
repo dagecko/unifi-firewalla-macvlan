@@ -518,9 +518,11 @@ services:
       - 1.1.1.1
       - 8.8.8.8
     networks:
-      unifi-internal:
       unifi-net:
         ipv4_address: CONTROLLER_IP_PLACEHOLDER
+        priority: 1000
+      unifi-internal:
+        priority: 100
 
 networks:
   unifi-internal:
