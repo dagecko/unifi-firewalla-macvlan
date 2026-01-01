@@ -320,6 +320,18 @@ if [ -z "$PARENT_INTERFACE" ]; then
 fi
 echo -e "${GREEN}${PARENT_INTERFACE}${NC}"
 
+# Detect if this is a VLAN interface
+echo -n "Checking network type... "
+VLAN_MEMBERS=$(brctl show ${PARENT_INTERFACE} 2>/dev/null | tail -n +2 | awk '{print $NF}')
+if echo "$VLAN_MEMBERS" | grep -q "\."; then
+    IS_VLAN="true"
+    echo -e "${YELLOW}VLAN detected${NC}"
+    echo -e "${YELLOW}Note: VLAN networks will use bridge networking instead of macvlan${NC}"
+else
+    IS_VLAN="false"
+    echo -e "${GREEN}Native LAN detected${NC}"
+fi
+
 echo ""
 echo -e "${YELLOW}Selected Network Configuration:${NC}"
 echo -e "  Interface: ${GREEN}${PARENT_INTERFACE}${NC}"
@@ -583,10 +595,23 @@ sleep 10
 BRIDGE_ID=$(sudo docker network inspect unifi_unifi-internal | grep '"Id"' | head -1 | cut -d'"' -f4 | cut -c1-12)
 SUBNET=$(sudo docker network inspect unifi_unifi-internal | grep '"Subnet"' | head -1 | cut -d'"' -f4)
 sudo ip route add $SUBNET dev br-$BRIDGE_ID table wan_routable 2>/dev/null || true
+
+# Fix container routing to use macvlan for external traffic (only needed for VLAN networks)
+IS_VLAN_PLACEHOLDER
+if [ "$IS_VLAN" = "true" ]; then
+    sleep 5
+    MACVLAN_GW=$(sudo docker network inspect unifi_unifi-net | grep '"Gateway"' | head -1 | cut -d'"' -f4)
+    INTERNAL_GW=$(sudo docker network inspect unifi_unifi-internal | grep '"Gateway"' | head -1 | cut -d'"' -f4)
+    if [ -n "$MACVLAN_GW" ] && [ -n "$INTERNAL_GW" ]; then
+        sudo docker exec unifi ip route del default via $INTERNAL_GW dev eth0 2>/dev/null || true
+        sudo docker exec unifi ip route add default via $MACVLAN_GW dev eth1 2>/dev/null || true
+    fi
+fi
 EOF
 fi
 sudo chmod +x /home/pi/.firewalla/config/post_main.d/start_unifi.sh
 sudo chown pi:pi /home/pi/.firewalla/config/post_main.d/start_unifi.sh
+sudo sed -i "s|IS_VLAN_PLACEHOLDER|IS_VLAN=\"${IS_VLAN}\"|g" /home/pi/.firewalla/config/post_main.d/start_unifi.sh
 echo -e "${GREEN}✓${NC}"
 
 # Save configuration for reference
