@@ -210,16 +210,17 @@ echo ""
 echo "Detecting available networks..."
 echo ""
 echo -e "${YELLOW}Available Networks on Firewalla:${NC}"
-ip -4 addr show | grep -E "^[0-9]+: |inet " | sed 'N;s/\n/ /' | awk '{
-    if ($2 ~ /:$/) {
-        iface = substr($2, 1, length($2)-1);
-        getline;
-        if ($1 == "inet") {
-            split($2, addr, "/");
-            split(addr[1], octets, ".");
-            network = octets[1] "." octets[2] "." octets[3] ".0/" addr[2];
-            printf "  %-10s %-18s %s\n", iface, addr[1], network;
-        }
+ip -4 -br addr show | grep -v "127.0.0.1" | grep -v "docker" | awk '{
+    iface = $1;
+    state = $2;
+    ip_cidr = $3;
+    if (ip_cidr != "") {
+        split(ip_cidr, parts, "/");
+        ip = parts[1];
+        cidr = parts[2];
+        split(ip, octets, ".");
+        network = octets[1] "." octets[2] "." octets[3] ".0/" cidr;
+        printf "  %-15s %-10s %-18s %s\n", iface, state, ip, network;
     }
 }'
 
