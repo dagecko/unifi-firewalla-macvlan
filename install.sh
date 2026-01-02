@@ -580,14 +580,13 @@ if [ "$IS_VLAN" = "true" ]; then
     # Create sidecar service definition
     SIDECAR_CONTENT="
   unifi-routing-fixer:
-    image: alpine:latest
+    image: nicolaka/netshoot:latest
     container_name: unifi-routing-fixer
     network_mode: \"service:unifi\"
     cap_add:
       - NET_ADMIN
     command: >
       sh -c \"
-      apk add --no-cache iproute2 &&
       echo 'Routing fixer started for VLAN network' &&
       while true; do
         sleep 10;
