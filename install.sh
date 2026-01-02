@@ -359,12 +359,12 @@ IP_COUNT=${IP_COUNT:-$DEFAULT_IP_COUNT}
 
 # Calculate IP range CIDR based on count
 case $IP_COUNT in
-    1) IP_RANGE_CIDR="/32" ;;
-    2) IP_RANGE_CIDR="/31" ;;
-    3|4) IP_RANGE_CIDR="/30" ;;
-    5|6|7|8) IP_RANGE_CIDR="/29" ;;
-    9|10|11|12|13|14|15|16) IP_RANGE_CIDR="/28" ;;
-    *) IP_RANGE_CIDR="/27" ;;
+    1) IP_RANGE_CIDR="32" ;;
+    2) IP_RANGE_CIDR="31" ;;
+    3|4) IP_RANGE_CIDR="30" ;;
+    5|6|7|8) IP_RANGE_CIDR="29" ;;
+    9|10|11|12|13|14|15|16) IP_RANGE_CIDR="28" ;;
+    *) IP_RANGE_CIDR="27" ;;
 esac
 
 # MongoDB password
@@ -548,7 +548,7 @@ networks:
       config:
         - subnet: NETWORK_BASE_PLACEHOLDER/NETWORK_CIDR_PLACEHOLDER
           gateway: GATEWAY_IP_PLACEHOLDER
-          ip_range: CONTROLLER_IP_PLACEHOLDERIP_RANGE_CIDR_PLACEHOLDER
+          ip_range: CONTROLLER_IP_PLACEHOLDER/IP_RANGE_CIDR_PLACEHOLDER
 EOF
 # Replace all placeholders with actual values - password comes from .env file
 sudo sed -i "s|TZ_SETTING_PLACEHOLDER|${TZ_SETTING}|g" /home/pi/.firewalla/run/docker/unifi/docker-compose.yaml
