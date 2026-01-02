@@ -694,7 +694,8 @@ echo -e "${GREEN}✓${NC}"
 echo ""
 echo -e "${YELLOW}Pulling Docker images and starting containers (this may take several minutes)...${NC}"
 cd /home/pi/.firewalla/run/docker/unifi
-sudo docker-compose up -d --pull always
+sudo docker-compose pull
+sudo docker-compose up -d
 
 # Wait for containers to start
 echo ""
