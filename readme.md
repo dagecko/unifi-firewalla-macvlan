@@ -6,25 +6,25 @@ Install UniFi Network Application in Docker on Firewalla Gold Series boxes using
 
 Most UniFi-on-Firewalla guides use a separate Docker bridge network (172.16.1.0/24), requiring routing tricks and inform URL changes. This macvlan approach puts the controller directly on your existing management network with significant advantages:
 
-### Performance & Efficiency ⭐⭐⭐⭐⭐
+### Performance & Efficiency
 - **Near-native performance**: Direct L2 network access eliminates Docker NAT overhead
 - **Lower latency**: No bridge forwarding delays for device communications
 - **Reduced CPU usage**: Fewer iptables rules and packet processing
 
-### Security & Isolation ⭐⭐⭐⭐⭐
+### Security & Isolation
 - **True network segmentation**: Controller lives on management VLAN, not shared bridge
 - **Policy enforcement**: Firewalla ACLs apply directly to controller traffic
 - **Cleaner firewall rules**: No complex Docker bridge NAT rules to maintain
 - **Better visibility**: Traffic appears as real network traffic in Firewalla analytics
 
-### Migration & Operations ⭐⭐⭐⭐
+### Migration & Operations
 - **Seamless UDM/Cloud Key migration**: Devices stay on same L2 network
 - **No inform URL changes**: Backup restoration works without reconfiguring devices
 - **Enterprise architecture**: Matches out-of-band management best practices
 - **Easier troubleshooting**: Standard network tools work (ping, traceroute, etc.)
 
 ### Bridge Networking Trade-offs
-- **Simpler initial setup** ⭐⭐ (but more complex long-term maintenance)
+- **Simpler initial setup** (but more complex long-term maintenance)
 - **More portable** (works without network changes, but at cost of isolation)
 - **Easier for beginners** (familiar Docker patterns, but less optimal for production)
 
@@ -247,10 +247,10 @@ sudo rm -f /home/pi/.firewalla/config/post_main.d/start_unifi.sh
 Due to how macvlan works, the Firewalla host cannot directly communicate with containers on the macvlan network without a shim interface. This is expected Linux kernel behavior, not a bug.
 
 **What this means:**
-- ✅ External devices (laptops, phones, tablets) can access the controller directly at `https://192.168.240.2:8443`
-- ✅ UniFi devices on the network can communicate with the controller normally
-- ❌ Firewalla host cannot access the controller with regular `curl https://192.168.240.2:8443`
-- ✅ **With shim enabled:** Firewalla host can access via `curl --interface unifi-shim https://192.168.240.2:8443`
+- External devices (laptops, phones, tablets) can access the controller directly at `https://192.168.240.2:8443`
+- UniFi devices on the network can communicate with the controller normally
+- Firewalla host cannot access the controller with regular `curl https://192.168.240.2:8443`
+- **With shim enabled:** Firewalla host can access via `curl --interface unifi-shim https://192.168.240.2:8443`
 
 If you need to access the controller from Firewalla itself (for health checks, API access, or monitoring scripts), enable the shim interface during installation or see [advanced.md](advanced.md) for manual setup.
 
