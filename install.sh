@@ -519,7 +519,7 @@ services:
       - PGID=1000
       - TZ=TZ_SETTING_PLACEHOLDER
       - MONGO_USER=unifi
-      - MONGO_PASS=${MONGO_PASSWORD}
+      - MONGO_PASS=\${MONGO_PASSWORD}
       - MONGO_HOST=unifi-db
       - MONGO_PORT=27017
       - MONGO_DBNAME=unifi
@@ -533,6 +533,7 @@ services:
       unifi-internal:
       unifi-net:
         ipv4_address: CONTROLLER_IP_PLACEHOLDER
+SIDECAR_SERVICE_PLACEHOLDER
 
 networks:
   unifi-internal:
@@ -557,6 +558,38 @@ sudo sed -i "s|NETWORK_CIDR_PLACEHOLDER|${NETWORK_CIDR}|g" /home/pi/.firewalla/r
 sudo sed -i "s|GATEWAY_IP_PLACEHOLDER|${GATEWAY_IP}|g" /home/pi/.firewalla/run/docker/unifi/docker-compose.yaml
 sudo sed -i "s|IP_RANGE_CIDR_PLACEHOLDER|${IP_RANGE_CIDR}|g" /home/pi/.firewalla/run/docker/unifi/docker-compose.yaml
 sudo sed -i "s|PARENT_INTERFACE_PLACEHOLDER|${PARENT_INTERFACE}|g" /home/pi/.firewalla/run/docker/unifi/docker-compose.yaml
+
+# Add sidecar routing fixer for VLAN networks
+if [ "$IS_VLAN" = "true" ]; then
+    SIDECAR_SERVICE="
+  unifi-routing-fixer:
+    image: alpine:latest
+    container_name: unifi-routing-fixer
+    network_mode: \"container:unifi\"
+    cap_add:
+      - NET_ADMIN
+    command: >
+      sh -c \"
+      apk add --no-cache iproute2 &&
+      echo 'Routing fixer started for VLAN network' &&
+      while true; do
+        sleep 10;
+        if ! ip route show | grep -q 'default via ${GATEWAY_IP} dev eth1'; then
+          echo 'Fixing container routing...';
+          ip route del default 2>/dev/null || true;
+          ip route add default via ${GATEWAY_IP} dev eth1 2>/dev/null || true;
+          echo 'Routing fixed';
+        fi;
+      done\"
+    restart: unless-stopped"
+else
+    SIDECAR_SERVICE=""
+fi
+
+# Escape special characters for sed
+SIDECAR_SERVICE_ESCAPED=$(echo "$SIDECAR_SERVICE" | sed 's/[\/&]/\\&/g' | sed ':a;N;$!ba;s/\n/\\n/g')
+sudo sed -i "s|SIDECAR_SERVICE_PLACEHOLDER|${SIDECAR_SERVICE_ESCAPED}|g" /home/pi/.firewalla/run/docker/unifi/docker-compose.yaml
+
 echo -e "${GREEN}✓${NC}"
 
 # Create startup script for persistence
@@ -582,23 +615,12 @@ sudo ip link set unifi-shim up 2>/dev/null || true
 sudo ip route add ${CONTROLLER_IP}/32 dev unifi-shim 2>/dev/null || true
 sudo ip route add ${CONTROLLER_IP}/32 dev unifi-shim table lan_routable 2>/dev/null || true
 
-# VLAN-specific fixes
+# VLAN-specific fix: Add policy routing rule
 IS_VLAN_PLACEHOLDER
 if [ "\\\$IS_VLAN" = "true" ]; then
-    # Fix 1: Add policy routing rule for VLAN subnet to use lan_routable table
+    # Add policy routing rule for VLAN subnet to use lan_routable table
     sudo ip rule add from ${NETWORK_BASE}/${NETWORK_CIDR} lookup lan_routable priority 5002 2>/dev/null || true
-
-    # Fix 2: Fix container routing to use macvlan interface for external traffic
-    sleep 5
-    CONTAINER_PID=\\\$(docker inspect -f '{{.State.Pid}}' unifi)
-    if [ -n "\\\$CONTAINER_PID" ] && [ "\\\$CONTAINER_PID" != "0" ]; then
-        MACVLAN_GW=\\\$(docker network inspect unifi_unifi-net | grep '"Gateway"' | head -1 | cut -d'"' -f4)
-        INTERNAL_GW=\\\$(docker network inspect unifi_unifi-internal | grep '"Gateway"' | head -1 | cut -d'"' -f4)
-        if [ -n "\\\$MACVLAN_GW" ] && [ -n "\\\$INTERNAL_GW" ]; then
-            sudo nsenter -t \\\$CONTAINER_PID -n ip route del default via \\\$INTERNAL_GW dev eth0 2>/dev/null || true
-            sudo nsenter -t \\\$CONTAINER_PID -n ip route add default via \\\$MACVLAN_GW dev eth1 2>/dev/null || true
-        fi
-    fi
+    # Note: Container routing is handled by the sidecar container
 fi
 EOF
 else
@@ -615,25 +637,14 @@ BRIDGE_ID=$(sudo docker network inspect unifi_unifi-internal | grep '"Id"' | hea
 SUBNET=$(sudo docker network inspect unifi_unifi-internal | grep '"Subnet"' | head -1 | cut -d'"' -f4)
 sudo ip route add $SUBNET dev br-$BRIDGE_ID table wan_routable 2>/dev/null || true
 
-# VLAN-specific fixes
+# VLAN-specific fix: Add policy routing rule
 IS_VLAN_PLACEHOLDER
 NETWORK_BASE_PLACEHOLDER
 NETWORK_CIDR_PLACEHOLDER
 if [ "$IS_VLAN" = "true" ]; then
-    # Fix 1: Add policy routing rule for VLAN subnet to use lan_routable table
+    # Add policy routing rule for VLAN subnet to use lan_routable table
     sudo ip rule add from $NETWORK_BASE/$NETWORK_CIDR lookup lan_routable priority 5002 2>/dev/null || true
-
-    # Fix 2: Fix container routing to use macvlan interface for external traffic
-    sleep 5
-    CONTAINER_PID=$(docker inspect -f '{{.State.Pid}}' unifi)
-    if [ -n "$CONTAINER_PID" ] && [ "$CONTAINER_PID" != "0" ]; then
-        MACVLAN_GW=$(docker network inspect unifi_unifi-net | grep '"Gateway"' | head -1 | cut -d'"' -f4)
-        INTERNAL_GW=$(docker network inspect unifi_unifi-internal | grep '"Gateway"' | head -1 | cut -d'"' -f4)
-        if [ -n "$MACVLAN_GW" ] && [ -n "$INTERNAL_GW" ]; then
-            sudo nsenter -t $CONTAINER_PID -n ip route del default via $INTERNAL_GW dev eth0 2>/dev/null || true
-            sudo nsenter -t $CONTAINER_PID -n ip route add default via $MACVLAN_GW dev eth1 2>/dev/null || true
-        fi
-    fi
+    # Note: Container routing is handled by the sidecar container
 fi
 EOF
 fi
