@@ -737,6 +737,29 @@ if [ -n "$SHIM_IP" ]; then
     echo -e "${GREEN}✓${NC}"
 fi
 
+# VLAN-specific networking configuration
+if [ "$IS_VLAN" = "true" ]; then
+    echo ""
+    echo -n "Configuring VLAN-specific routing... "
+
+    # Get the WAN gateway and interface
+    WAN_GATEWAY=$(ip route show default | grep -oP '(?<=via )[^ ]+' | head -1)
+    WAN_INTERFACE=$(ip route show default | grep -oP '(?<=dev )[^ ]+' | head -1)
+
+    if [ -n "$WAN_GATEWAY" ] && [ -n "$WAN_INTERFACE" ]; then
+        # Add default route to lan_routable table for container internet access
+        sudo ip route add default via ${WAN_GATEWAY} dev ${WAN_INTERFACE} table lan_routable 2>/dev/null || true
+
+        # Add policy routing rule to ensure return traffic uses shim
+        # This must have higher priority than br*_local tables (priority 501)
+        sudo ip rule add to ${CONTROLLER_IP} lookup main priority 500 2>/dev/null || true
+
+        echo -e "${GREEN}✓${NC}"
+    else
+        echo -e "${YELLOW}⚠${NC} (Could not detect WAN gateway - manual configuration may be needed)"
+    fi
+fi
+
 echo ""
 echo -e "${GREEN}╔═══════════════════════════════════════════════════════════════╗${NC}"
 echo -e "${GREEN}║                      Installation Complete!                   ║${NC}"
