@@ -71,6 +71,17 @@ while read -r rule; do
     RULE_NUM=$(echo "$rule" | awk '{print $1}' | tr -d ':')
     [ -n "$RULE_NUM" ] && sudo ip rule del pref $RULE_NUM 2>/dev/null || true
 done < <(ip rule list | grep "lookup lan_routable" | grep "5002:")
+# Remove policy routing rules for container return traffic (priority 500)
+while read -r rule; do
+    RULE_NUM=$(echo "$rule" | awk '{print $1}' | tr -d ':')
+    [ -n "$RULE_NUM" ] && sudo ip rule del pref $RULE_NUM 2>/dev/null || true
+done < <(ip rule list | grep "lookup main" | grep "500:")
+# Remove default route from lan_routable table if it was added for VLAN
+# (Only remove if it's the exact route we added - check for eth0)
+DEFAULT_VIA_ETH0=$(ip route show table lan_routable | grep "^default via .* dev eth0$")
+if [ -n "$DEFAULT_VIA_ETH0" ]; then
+    sudo ip route del default table lan_routable 2>/dev/null && echo -e "${GREEN}✓ VLAN default route removed${NC}" || true
+fi
 sudo ip link delete unifi-shim 2>/dev/null && echo -e "${GREEN}✓ Shim interface, routes, and rules removed${NC}" || echo -e "${YELLOW}⚠ Shim interface not found${NC}"
 
 echo ""
