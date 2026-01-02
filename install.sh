@@ -581,6 +581,25 @@ sudo ip addr add ${SHIM_IP}/32 dev unifi-shim 2>/dev/null || true
 sudo ip link set unifi-shim up 2>/dev/null || true
 sudo ip route add ${CONTROLLER_IP}/32 dev unifi-shim 2>/dev/null || true
 sudo ip route add ${CONTROLLER_IP}/32 dev unifi-shim table lan_routable 2>/dev/null || true
+
+# VLAN-specific fixes
+IS_VLAN_PLACEHOLDER
+if [ "\\\$IS_VLAN" = "true" ]; then
+    # Fix 1: Add policy routing rule for VLAN subnet to use lan_routable table
+    sudo ip rule add from ${NETWORK_BASE}/${NETWORK_CIDR} lookup lan_routable priority 5002 2>/dev/null || true
+
+    # Fix 2: Fix container routing to use macvlan interface for external traffic
+    sleep 5
+    CONTAINER_PID=\\\$(docker inspect -f '{{.State.Pid}}' unifi)
+    if [ -n "\\\$CONTAINER_PID" ] && [ "\\\$CONTAINER_PID" != "0" ]; then
+        MACVLAN_GW=\\\$(docker network inspect unifi_unifi-net | grep '"Gateway"' | head -1 | cut -d'"' -f4)
+        INTERNAL_GW=\\\$(docker network inspect unifi_unifi-internal | grep '"Gateway"' | head -1 | cut -d'"' -f4)
+        if [ -n "\\\$MACVLAN_GW" ] && [ -n "\\\$INTERNAL_GW" ]; then
+            sudo nsenter -t \\\$CONTAINER_PID -n ip route del default via \\\$INTERNAL_GW dev eth0 2>/dev/null || true
+            sudo nsenter -t \\\$CONTAINER_PID -n ip route add default via \\\$MACVLAN_GW dev eth1 2>/dev/null || true
+        fi
+    fi
+fi
 EOF
 else
 sudo bash -c "cat > /home/pi/.firewalla/config/post_main.d/start_unifi.sh" << 'EOF'
@@ -596,15 +615,24 @@ BRIDGE_ID=$(sudo docker network inspect unifi_unifi-internal | grep '"Id"' | hea
 SUBNET=$(sudo docker network inspect unifi_unifi-internal | grep '"Subnet"' | head -1 | cut -d'"' -f4)
 sudo ip route add $SUBNET dev br-$BRIDGE_ID table wan_routable 2>/dev/null || true
 
-# Fix container routing to use macvlan for external traffic (only needed for VLAN networks)
+# VLAN-specific fixes
 IS_VLAN_PLACEHOLDER
+NETWORK_BASE_PLACEHOLDER
+NETWORK_CIDR_PLACEHOLDER
 if [ "$IS_VLAN" = "true" ]; then
+    # Fix 1: Add policy routing rule for VLAN subnet to use lan_routable table
+    sudo ip rule add from $NETWORK_BASE/$NETWORK_CIDR lookup lan_routable priority 5002 2>/dev/null || true
+
+    # Fix 2: Fix container routing to use macvlan interface for external traffic
     sleep 5
-    MACVLAN_GW=$(sudo docker network inspect unifi_unifi-net | grep '"Gateway"' | head -1 | cut -d'"' -f4)
-    INTERNAL_GW=$(sudo docker network inspect unifi_unifi-internal | grep '"Gateway"' | head -1 | cut -d'"' -f4)
-    if [ -n "$MACVLAN_GW" ] && [ -n "$INTERNAL_GW" ]; then
-        sudo docker exec unifi ip route del default via $INTERNAL_GW dev eth0 2>/dev/null || true
-        sudo docker exec unifi ip route add default via $MACVLAN_GW dev eth1 2>/dev/null || true
+    CONTAINER_PID=$(docker inspect -f '{{.State.Pid}}' unifi)
+    if [ -n "$CONTAINER_PID" ] && [ "$CONTAINER_PID" != "0" ]; then
+        MACVLAN_GW=$(docker network inspect unifi_unifi-net | grep '"Gateway"' | head -1 | cut -d'"' -f4)
+        INTERNAL_GW=$(docker network inspect unifi_unifi-internal | grep '"Gateway"' | head -1 | cut -d'"' -f4)
+        if [ -n "$MACVLAN_GW" ] && [ -n "$INTERNAL_GW" ]; then
+            sudo nsenter -t $CONTAINER_PID -n ip route del default via $INTERNAL_GW dev eth0 2>/dev/null || true
+            sudo nsenter -t $CONTAINER_PID -n ip route add default via $MACVLAN_GW dev eth1 2>/dev/null || true
+        fi
     fi
 fi
 EOF
@@ -612,6 +640,8 @@ fi
 sudo chmod +x /home/pi/.firewalla/config/post_main.d/start_unifi.sh
 sudo chown pi:pi /home/pi/.firewalla/config/post_main.d/start_unifi.sh
 sudo sed -i "s|IS_VLAN_PLACEHOLDER|IS_VLAN=\"${IS_VLAN}\"|g" /home/pi/.firewalla/config/post_main.d/start_unifi.sh
+sudo sed -i "s|NETWORK_BASE_PLACEHOLDER|NETWORK_BASE=\"${NETWORK_BASE}\"|g" /home/pi/.firewalla/config/post_main.d/start_unifi.sh
+sudo sed -i "s|NETWORK_CIDR_PLACEHOLDER|NETWORK_CIDR=\"${NETWORK_CIDR}\"|g" /home/pi/.firewalla/config/post_main.d/start_unifi.sh
 echo -e "${GREEN}✓${NC}"
 
 # Save configuration for reference

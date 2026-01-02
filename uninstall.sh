@@ -57,7 +57,7 @@ sudo docker network rm unifi_unifi-internal 2>/dev/null && echo -e "${GREEN}✓ 
 sudo docker network rm unifi_unifi-net 2>/dev/null && echo -e "${GREEN}✓ unifi_unifi-net network removed${NC}" || echo -e "${YELLOW}⚠ unifi_unifi-net network not found${NC}"
 
 echo ""
-echo -e "${YELLOW}Removing shim interface and routes...${NC}"
+echo -e "${YELLOW}Removing shim interface, routes, and policy rules...${NC}"
 # Remove all routes using unifi-shim from main table
 while read -r route; do
     [ -n "$route" ] && sudo ip route del $route 2>/dev/null || true
@@ -66,7 +66,12 @@ done < <(ip route | grep "dev unifi-shim")
 while read -r route; do
     [ -n "$route" ] && sudo ip route del $route table lan_routable 2>/dev/null || true
 done < <(ip route show table lan_routable | grep "dev unifi-shim")
-sudo ip link delete unifi-shim 2>/dev/null && echo -e "${GREEN}✓ Shim interface and routes removed${NC}" || echo -e "${YELLOW}⚠ Shim interface not found${NC}"
+# Remove policy routing rules for VLAN networks (priority 5002)
+while read -r rule; do
+    RULE_NUM=$(echo "$rule" | awk '{print $1}' | tr -d ':')
+    [ -n "$RULE_NUM" ] && sudo ip rule del pref $RULE_NUM 2>/dev/null || true
+done < <(ip rule list | grep "lookup lan_routable" | grep "5002:")
+sudo ip link delete unifi-shim 2>/dev/null && echo -e "${GREEN}✓ Shim interface, routes, and rules removed${NC}" || echo -e "${YELLOW}⚠ Shim interface not found${NC}"
 
 echo ""
 echo -e "${YELLOW}Removing data directories...${NC}"
