@@ -133,8 +133,17 @@ if [ -d /home/pi/.firewalla/run/docker/unifi ] || \
             # Remove networks
             sudo docker network rm unifi_unifi-internal unifi_unifi-net 2>/dev/null || true
 
-            # Remove shim
+            # Remove shim and VLAN routing configuration
             sudo ip link delete unifi-shim 2>/dev/null || true
+
+            # Remove VLAN-specific policy routing rules (priority 500)
+            while read -r rule; do
+                RULE_NUM=$(echo "$rule" | awk '{print $1}' | tr -d ':')
+                [ -n "$RULE_NUM" ] && sudo ip rule del pref $RULE_NUM 2>/dev/null || true
+            done < <(ip rule list | grep "lookup main" | grep "500:")
+
+            # Remove default route from lan_routable table if present
+            sudo ip route del default table lan_routable 2>/dev/null || true
 
             # Remove data directories - force complete deletion
             echo -n "  Removing data directories... "
