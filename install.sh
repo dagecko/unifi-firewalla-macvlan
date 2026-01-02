@@ -559,17 +559,21 @@ sudo sed -i "s|GATEWAY_IP_PLACEHOLDER|${GATEWAY_IP}|g" /home/pi/.firewalla/run/d
 sudo sed -i "s|IP_RANGE_CIDR_PLACEHOLDER|${IP_RANGE_CIDR}|g" /home/pi/.firewalla/run/docker/unifi/docker-compose.yaml
 sudo sed -i "s|PARENT_INTERFACE_PLACEHOLDER|${PARENT_INTERFACE}|g" /home/pi/.firewalla/run/docker/unifi/docker-compose.yaml
 
+# Remove the placeholder first
+sudo sed -i "s|SIDECAR_SERVICE_PLACEHOLDER||g" /home/pi/.firewalla/run/docker/unifi/docker-compose.yaml
+
 # Add sidecar routing fixer for VLAN networks
 if [ "$IS_VLAN" = "true" ]; then
-    SIDECAR_SERVICE="
+    sudo bash -c "cat >> /home/pi/.firewalla/run/docker/unifi/docker-compose.yaml" << SIDECAR_EOF
+
   unifi-routing-fixer:
     image: alpine:latest
     container_name: unifi-routing-fixer
-    network_mode: \"container:unifi\"
+    network_mode: "container:unifi"
     cap_add:
       - NET_ADMIN
     command: >
-      sh -c \"
+      sh -c "
       apk add --no-cache iproute2 &&
       echo 'Routing fixer started for VLAN network' &&
       while true; do
@@ -580,15 +584,10 @@ if [ "$IS_VLAN" = "true" ]; then
           ip route add default via ${GATEWAY_IP} dev eth1 2>/dev/null || true;
           echo 'Routing fixed';
         fi;
-      done\"
-    restart: unless-stopped"
-else
-    SIDECAR_SERVICE=""
+      done"
+    restart: unless-stopped
+SIDECAR_EOF
 fi
-
-# Escape special characters for sed
-SIDECAR_SERVICE_ESCAPED=$(echo "$SIDECAR_SERVICE" | sed 's/[\/&]/\\&/g' | sed ':a;N;$!ba;s/\n/\\n/g')
-sudo sed -i "s|SIDECAR_SERVICE_PLACEHOLDER|${SIDECAR_SERVICE_ESCAPED}|g" /home/pi/.firewalla/run/docker/unifi/docker-compose.yaml
 
 echo -e "${GREEN}✓${NC}"
 
