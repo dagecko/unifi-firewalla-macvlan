@@ -2,14 +2,33 @@
 
 Install UniFi Network Application in Docker on Firewalla Gold Series boxes using macvlan networking. This places the controller directly on your management network rather than an isolated Docker bridge network.
 
-## Why Macvlan?
+## Why Macvlan Over Bridge Networking?
 
-Most UniFi-on-Firewalla guides use a separate Docker bridge network (172.16.1.0/24), requiring routing tricks and inform URL changes. This approach puts the controller directly on your existing management VLAN, which:
+Most UniFi-on-Firewalla guides use a separate Docker bridge network (172.16.1.0/24), requiring routing tricks and inform URL changes. This macvlan approach puts the controller directly on your existing management network with significant advantages:
 
-- Simplifies migration from UDM/Cloud Key (devices stay on same L2 network)
-- Enables cleaner network architecture (management plane separated from user traffic)
-- Allows backup restoration without changing inform URLs on every device
-- Matches enterprise best practices for out-of-band management
+### Performance & Efficiency ⭐⭐⭐⭐⭐
+- **Near-native performance**: Direct L2 network access eliminates Docker NAT overhead
+- **Lower latency**: No bridge forwarding delays for device communications
+- **Reduced CPU usage**: Fewer iptables rules and packet processing
+
+### Security & Isolation ⭐⭐⭐⭐⭐
+- **True network segmentation**: Controller lives on management VLAN, not shared bridge
+- **Policy enforcement**: Firewalla ACLs apply directly to controller traffic
+- **Cleaner firewall rules**: No complex Docker bridge NAT rules to maintain
+- **Better visibility**: Traffic appears as real network traffic in Firewalla analytics
+
+### Migration & Operations ⭐⭐⭐⭐
+- **Seamless UDM/Cloud Key migration**: Devices stay on same L2 network
+- **No inform URL changes**: Backup restoration works without reconfiguring devices
+- **Enterprise architecture**: Matches out-of-band management best practices
+- **Easier troubleshooting**: Standard network tools work (ping, traceroute, etc.)
+
+### Bridge Networking Trade-offs
+- **Simpler initial setup** ⭐⭐ (but more complex long-term maintenance)
+- **More portable** (works without network changes, but at cost of isolation)
+- **Easier for beginners** (familiar Docker patterns, but less optimal for production)
+
+**Verdict**: For production UniFi deployments on Firewalla, macvlan is the superior choice. Bridge networking is acceptable for testing but not recommended for long-term use.
 
 ## Requirements
 
@@ -33,6 +52,75 @@ Internal Docker Network (not exposed to network):
         └── MongoDB ← only accessible by UniFi Controller
 ```
 
+### Intelligent Network Detection and Adaptive Deployment
+
+The installation script automatically detects your network type and deploys the optimal architecture:
+
+**Native LAN Networks** (e.g., 192.168.101.0/24 on br7):
+- **Detection**: Bridge interface uses physical interface without VLAN tag (like `eth1`)
+- **Container count**: 2 (unifi + unifi-db)
+- **Routing**: Works automatically with standard macvlan - no additional configuration needed
+- **Why it works**: Docker correctly sets default route to macvlan gateway on native LANs
+- **Best for**: Home networks, testing environments, simpler Firewalla setups
+
+**VLAN Networks** (e.g., 192.168.240.0/24 on br0):
+- **Detection**: Bridge interface uses VLAN-tagged subinterface (like `eth1.240`)
+- **Container count**: 3 (unifi + unifi-db + routing-fixer sidecar)
+- **Routing**: Requires self-healing sidecar container plus policy routing rule
+- **Why needed**: Docker's multi-network containers always default route via first network (internal bridge) instead of macvlan, breaking connectivity on VLANs
+- **Best for**: Production deployments, enterprise VLANs, proper network segmentation
+
+**The VLAN Routing Problem:**
+
+When Docker attaches a container to multiple networks (internal bridge for MongoDB + macvlan for your network), it creates the default route via the internal bridge (`eth0`) instead of the macvlan interface (`eth1`). On VLAN networks, this causes two critical issues:
+
+1. **Container routing**: Outbound traffic tries to use internal bridge gateway (doesn't exist) instead of VLAN gateway
+2. **Firewalla policy routing**: Reply packets can be sent to WAN interface instead of back to source VLAN
+
+**The Self-Healing Sidecar Solution:**
+
+For VLAN deployments, the script automatically deploys a routing-fixer sidecar container:
+
+- **Technology**: [nicolaka/netshoot](https://github.com/nicolaka/netshoot) container (8.3k GitHub stars, widely trusted in network engineering community)
+- **Author**: Nicola Kabar (Docker Captain, AWS Solutions Architect)
+- **Purpose**: Pre-built network troubleshooting toolkit with iproute2 and networking tools
+- **Size**: ~20MB compressed, minimal resource overhead
+- **Security**:
+  - Only has NET_ADMIN capability for routing commands
+  - Shares network namespace only (cannot access UniFi filesystem or processes)
+  - Open source and auditable
+
+**How the sidecar works:**
+```
+Every 10 seconds:
+  1. Check if default route points to eth1 (macvlan interface)
+  2. If NO: Delete incorrect route via eth0, add correct route via eth1
+  3. If YES: Do nothing, continue monitoring
+  4. Repeat
+```
+
+**Additional Firewalla host configuration:**
+```bash
+# Policy routing rule (applied automatically by install script)
+ip rule add from 192.168.240.0/24 lookup lan_routable priority 5002
+```
+This ensures reply packets use the correct routing table and return via the VLAN interface instead of WAN.
+
+**Why sidecar instead of alternatives:**
+
+- **vs Startup script with nsenter**: Sidecar is self-healing - automatically fixes routing after container restarts
+- **vs Manual routing**: Docker-native solution managed by docker-compose
+- **vs Complex iptables**: Simpler, more maintainable, easier to troubleshoot
+- **Observability**: `docker logs unifi-routing-fixer` shows routing fixes in real-time
+
+**Decision Guide:**
+
+Choose your network based on your Firewalla setup:
+- **Native LAN**: If your management network is on br7 (or main LAN without VLANs)
+- **VLAN**: If your management network is on a dedicated VLAN (recommended for production)
+
+The script handles all complexity automatically - you just select the network and it deploys the right architecture!
+
 ## Screenshots
 
 ### Installation Process
@@ -40,8 +128,8 @@ Internal Docker Network (not exposed to network):
 ![Installation start](screenshots/install-start.png)
 *Starting the installation script*
 
-![Network selection](screenshots/network-selection.png)
-*Selecting network configuration*
+![Network selection](screenshots/visual-network-selection.png)
+*Selecting network configuration with visual interface list*
 
 ![MongoDB and shim setup](screenshots/mongo_and_shim.png)
 *Configuring MongoDB password and shim interface*
