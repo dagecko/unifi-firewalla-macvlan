@@ -357,7 +357,7 @@ DEFAULT_IP_COUNT="1"
 read -p "Number of IPs to reserve for containers [${DEFAULT_IP_COUNT}]: " IP_COUNT
 IP_COUNT=${IP_COUNT:-$DEFAULT_IP_COUNT}
 
-# Calculate IP range CIDR based on count
+# Calculate IP range CIDR and base address based on count
 case $IP_COUNT in
     1) IP_RANGE_CIDR="32" ;;
     2) IP_RANGE_CIDR="31" ;;
@@ -366,6 +366,21 @@ case $IP_COUNT in
     9|10|11|12|13|14|15|16) IP_RANGE_CIDR="28" ;;
     *) IP_RANGE_CIDR="27" ;;
 esac
+
+# Calculate the IP range base address (must be network-aligned for Docker)
+# For /32 and /31, use the controller IP directly
+# For /30 and larger, calculate the network address by masking the host bits
+LAST_OCTET=$(echo $CONTROLLER_IP | cut -d. -f4)
+NETWORK_PREFIX=$(echo $CONTROLLER_IP | cut -d. -f1-3)
+
+if [ "$IP_RANGE_CIDR" = "32" ] || [ "$IP_RANGE_CIDR" = "31" ]; then
+    IP_RANGE_BASE="$CONTROLLER_IP"
+else
+    # Calculate block size and network address
+    BLOCK_SIZE=$((2 ** (32 - IP_RANGE_CIDR)))
+    NETWORK_START=$((LAST_OCTET / BLOCK_SIZE * BLOCK_SIZE))
+    IP_RANGE_BASE="${NETWORK_PREFIX}.${NETWORK_START}"
+fi
 
 # MongoDB password
 echo ""
@@ -548,7 +563,7 @@ networks:
       config:
         - subnet: NETWORK_BASE_PLACEHOLDER/NETWORK_CIDR_PLACEHOLDER
           gateway: GATEWAY_IP_PLACEHOLDER
-          ip_range: CONTROLLER_IP_PLACEHOLDER/IP_RANGE_CIDR_PLACEHOLDER
+          ip_range: IP_RANGE_BASE_PLACEHOLDER/IP_RANGE_CIDR_PLACEHOLDER
 EOF
 # Replace all placeholders with actual values - password comes from .env file
 sudo sed -i "s|TZ_SETTING_PLACEHOLDER|${TZ_SETTING}|g" /home/pi/.firewalla/run/docker/unifi/docker-compose.yaml
@@ -556,6 +571,7 @@ sudo sed -i "s|CONTROLLER_IP_PLACEHOLDER|${CONTROLLER_IP}|g" /home/pi/.firewalla
 sudo sed -i "s|NETWORK_BASE_PLACEHOLDER|${NETWORK_BASE}|g" /home/pi/.firewalla/run/docker/unifi/docker-compose.yaml
 sudo sed -i "s|NETWORK_CIDR_PLACEHOLDER|${NETWORK_CIDR}|g" /home/pi/.firewalla/run/docker/unifi/docker-compose.yaml
 sudo sed -i "s|GATEWAY_IP_PLACEHOLDER|${GATEWAY_IP}|g" /home/pi/.firewalla/run/docker/unifi/docker-compose.yaml
+sudo sed -i "s|IP_RANGE_BASE_PLACEHOLDER|${IP_RANGE_BASE}|g" /home/pi/.firewalla/run/docker/unifi/docker-compose.yaml
 sudo sed -i "s|IP_RANGE_CIDR_PLACEHOLDER|${IP_RANGE_CIDR}|g" /home/pi/.firewalla/run/docker/unifi/docker-compose.yaml
 sudo sed -i "s|PARENT_INTERFACE_PLACEHOLDER|${PARENT_INTERFACE}|g" /home/pi/.firewalla/run/docker/unifi/docker-compose.yaml
 
