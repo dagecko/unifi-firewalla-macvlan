@@ -566,9 +566,7 @@ if [ "$IS_VLAN" = "true" ]; then
   unifi-routing-fixer:
     image: alpine:latest
     container_name: unifi-routing-fixer
-    depends_on:
-      - unifi
-    network_mode: \"container:unifi\"
+    network_mode: \"service:unifi\"
     cap_add:
       - NET_ADMIN
     command: >
