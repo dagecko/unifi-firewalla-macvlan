@@ -279,6 +279,44 @@ The script will prompt you for:
 
 **Note:** After installation completes, the UniFi Controller may take 2-5 minutes to fully start up and become accessible.
 
+### Self-Healing Monitoring
+
+The installer automatically sets up a systemd monitoring service that:
+
+- **Checks every 60 seconds:**
+  - Container health (are containers running?)
+  - Network connectivity (can controller be reached?)
+  - Shim interface status (is it up and configured?)
+  - Macvlan network attachment (does container have eth1?)
+
+- **Automatically recovers from:**
+  - Network disruptions (AP reconnections, VLAN changes)
+  - Docker network failures (orphaned networks)
+  - Missing shim interface
+  - Container crashes
+
+- **Recovery actions:**
+  - Recreates shim interface if missing
+  - Runs full docker-compose down/prune/up cycle if network broken
+  - Restores VLAN routing rules
+  - Logs all actions for troubleshooting
+
+**Monitor the service:**
+```bash
+# View live logs
+sudo journalctl -u unifi-monitor -f
+
+# Check service status
+sudo systemctl status unifi-monitor
+
+# Restart monitoring service
+sudo systemctl restart unifi-monitor
+```
+
+**Log location:** `/var/log/unifi-monitor.log` (auto-rotates at 10MB)
+
+This ensures your controller stays online even when Firewalla's network stack is disrupted by events like AP reconnections or VLAN reconfigurations.
+
 ## Manual Install
 
 See [manual-install.md](manual-install.md) for step-by-step instructions.

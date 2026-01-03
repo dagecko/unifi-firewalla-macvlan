@@ -100,6 +100,15 @@ else
 fi
 
 echo ""
+echo -e "${YELLOW}Stopping and removing monitoring service...${NC}"
+sudo systemctl stop unifi-monitor.service 2>/dev/null && echo -e "${GREEN}✓ Monitoring service stopped${NC}" || echo -e "${YELLOW}⚠ Monitoring service not running${NC}"
+sudo systemctl disable unifi-monitor.service 2>/dev/null && echo -e "${GREEN}✓ Monitoring service disabled${NC}" || true
+sudo rm -f /etc/systemd/system/unifi-monitor.service 2>/dev/null && echo -e "${GREEN}✓ Monitoring service file removed${NC}" || echo -e "${YELLOW}⚠ Service file not found${NC}"
+sudo rm -f /home/pi/.firewalla/config/post_main.d/unifi-monitor.sh 2>/dev/null && echo -e "${GREEN}✓ Monitor script removed${NC}" || echo -e "${YELLOW}⚠ Monitor script not found${NC}"
+sudo rm -f /var/log/unifi-monitor.log* 2>/dev/null && echo -e "${GREEN}✓ Monitor logs removed${NC}" || true
+sudo systemctl daemon-reload
+
+echo ""
 echo -e "${YELLOW}Removing configuration files...${NC}"
 sudo rm -rf /home/pi/.firewalla/run/docker/unifi 2>/dev/null && echo -e "${GREEN}✓ Docker config removed${NC}" || echo -e "${YELLOW}⚠ Docker config not found${NC}"
 sudo rm -f /home/pi/.firewalla/config/post_main.d/start_unifi.sh 2>/dev/null && echo -e "${GREEN}✓ Startup script removed${NC}" || echo -e "${YELLOW}⚠ Startup script not found${NC}"

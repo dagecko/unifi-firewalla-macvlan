@@ -1,0 +1,23 @@
+[Unit]
+Description=UniFi Container Network Monitor and Self-Healing Service
+Documentation=https://github.com/dagecko/unifi-firewalla-macvlan
+After=network-online.target docker.service firewalla.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=simple
+ExecStart=/home/pi/.firewalla/config/post_main.d/unifi-monitor.sh
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Security hardening
+NoNewPrivileges=false
+PrivateTmp=yes
+ProtectSystem=strict
+ReadWritePaths=/var/log /home/pi/.firewalla
+
+[Install]
+WantedBy=multi-user.target

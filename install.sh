@@ -784,6 +784,36 @@ if [ "$IS_VLAN" = "true" ]; then
     fi
 fi
 
+# Install self-healing monitoring service
+echo ""
+echo -n "Installing self-healing monitoring service... "
+
+# Save configuration for monitor script
+sudo bash -c "cat > ${COMPOSE_DIR}/config.env" << ENVEOF
+CONTROLLER_IP="${CONTROLLER_IP}"
+SHIM_IP="${SHIM_IP}"
+PARENT_INTERFACE="${PARENT_INTERFACE}"
+IS_VLAN="${IS_VLAN}"
+NETWORK_BASE="${NETWORK_BASE}"
+NETWORK_CIDR="${NETWORK_CIDR}"
+ENVEOF
+
+# Download and install monitor script
+curl -sL "https://raw.githubusercontent.com/dagecko/unifi-firewalla-macvlan/main/unifi-monitor.sh" -o /tmp/unifi-monitor.sh
+sudo mv /tmp/unifi-monitor.sh /home/pi/.firewalla/config/post_main.d/unifi-monitor.sh
+sudo chmod +x /home/pi/.firewalla/config/post_main.d/unifi-monitor.sh
+
+# Download and install systemd service
+curl -sL "https://raw.githubusercontent.com/dagecko/unifi-firewalla-macvlan/main/unifi-monitor.service" -o /tmp/unifi-monitor.service
+sudo mv /tmp/unifi-monitor.service /etc/systemd/system/unifi-monitor.service
+
+# Enable and start monitoring service
+sudo systemctl daemon-reload
+sudo systemctl enable unifi-monitor.service 2>/dev/null || true
+sudo systemctl restart unifi-monitor.service
+
+echo -e "${GREEN}✓${NC}"
+
 echo ""
 echo -e "${GREEN}╔═══════════════════════════════════════════════════════════════╗${NC}"
 echo -e "${GREEN}║                      Installation Complete!                   ║${NC}"
@@ -817,6 +847,16 @@ else
     echo -e "    See advanced.md for health check scripts"
     echo ""
 fi
+echo -e "${GREEN}Self-Healing Monitoring:${NC}"
+echo -e "  • Monitoring service installed and running"
+echo -e "  • Automatically detects and recovers from network disruptions"
+echo -e "  • Checks every 60 seconds:"
+echo -e "    - Container health"
+echo -e "    - Network connectivity"
+echo -e "    - Shim interface status"
+echo -e "  • View logs: ${GREEN}sudo journalctl -u unifi-monitor -f${NC}"
+echo -e "  • Service status: ${GREEN}sudo systemctl status unifi-monitor${NC}"
+echo ""
 echo -e "To restore from a UDM/Cloud Key backup:"
 echo -e "  1. Open https://${CONTROLLER_IP}:8443"
 echo -e "  2. Choose 'Restore from backup' during setup"
