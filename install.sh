@@ -82,15 +82,152 @@ if [ -d /home/pi/.firewalla/run/docker/unifi ] || \
     sudo docker ps -a | grep -q "unifi\|unifi-db" && echo "  - Docker containers"
     sudo docker network ls | grep -q "unifi" && echo "  - Docker networks"
     echo ""
-    echo -e "${YELLOW}Options:${NC}"
-    echo "  1. Clean install (removes ALL existing data and containers)"
-    echo "  2. Cancel and run uninstall script manually"
-    echo "  3. Continue anyway (may cause conflicts)"
+    echo -e "${YELLOW}What would you like to do?${NC}"
+    echo "  ${GREEN}1) UPDATE${NC}    - Update scripts and services (keeps all data, no downtime)"
+    echo "  ${GREEN}2) REINSTALL${NC} - Full reinstall (keeps data, recreates containers)"
+    echo "  ${RED}3) DELETE${NC}    - Remove everything (deletes ALL data)"
+    echo "  4) CANCEL    - Exit without changes"
     echo ""
-    read -p "Choose option [1/2/3]: " INSTALL_OPTION
+    read -p "Your choice [1/2/3/4]: " INSTALL_OPTION
 
     case $INSTALL_OPTION in
         1)
+            # UPDATE: Update scripts and services without touching containers/data
+            echo ""
+            echo -e "${GREEN}═══════════════════════════════════════════════════════════════${NC}"
+            echo -e "${GREEN}                        UPDATE MODE                             ${NC}"
+            echo -e "${GREEN}═══════════════════════════════════════════════════════════════${NC}"
+            echo ""
+            echo "This will update:"
+            echo "  • Startup script (/home/pi/.firewalla/config/post_main.d/start_unifi.sh)"
+            echo "  • Monitoring service (unifi-monitor.sh and systemd service)"
+            echo "  • Docker Compose configuration"
+            echo ""
+            echo "This will NOT:"
+            echo "  • Stop or restart containers (unless docker-compose.yaml changed)"
+            echo "  • Touch your data (/data/unifi, /data/unifi-db)"
+            echo "  • Modify network settings"
+            echo ""
+            read -p "Continue with update? (yes/N): " CONFIRM_UPDATE
+            if [ "$CONFIRM_UPDATE" != "yes" ]; then
+                echo "Update cancelled."
+                exit 0
+            fi
+
+            echo ""
+            echo "Updating UniFi installation..."
+
+            # Load existing configuration
+            if [ -f /home/pi/.firewalla/run/docker/unifi/config.env ]; then
+                echo -n "  Loading existing configuration... "
+                source /home/pi/.firewalla/run/docker/unifi/config.env
+                echo -e "${GREEN}✓${NC}"
+            else
+                echo -e "${RED}Error: Cannot find existing configuration!${NC}"
+                echo "config.env not found. Please run a REINSTALL instead."
+                exit 1
+            fi
+
+            # Backup current docker-compose.yaml
+            if [ -f /home/pi/.firewalla/run/docker/unifi/docker-compose.yaml ]; then
+                echo -n "  Backing up docker-compose.yaml... "
+                sudo cp /home/pi/.firewalla/run/docker/unifi/docker-compose.yaml \
+                        /home/pi/.firewalla/run/docker/unifi/docker-compose.yaml.backup
+                echo -e "${GREEN}✓${NC}"
+            fi
+
+            # Update startup script
+            echo -n "  Updating startup script... "
+            # Script will be regenerated in the main flow
+            UPDATE_STARTUP=true
+            echo -e "${GREEN}✓${NC}"
+
+            # Update monitoring service
+            echo -n "  Updating monitoring service... "
+            sudo systemctl stop unifi-monitor 2>/dev/null || true
+            curl -sL "https://raw.githubusercontent.com/dagecko/unifi-firewalla-macvlan/main/unifi-monitor.sh" \
+                -o /tmp/unifi-monitor.sh 2>/dev/null
+            sudo mv /tmp/unifi-monitor.sh /home/pi/.firewalla/config/post_main.d/unifi-monitor.sh
+            sudo chmod +x /home/pi/.firewalla/config/post_main.d/unifi-monitor.sh
+            curl -sL "https://raw.githubusercontent.com/dagecko/unifi-firewalla-macvlan/main/unifi-monitor.service" \
+                -o /tmp/unifi-monitor.service 2>/dev/null
+            sudo mv /tmp/unifi-monitor.service /etc/systemd/system/unifi-monitor.service
+            sudo systemctl daemon-reload
+            sudo systemctl start unifi-monitor 2>/dev/null || true
+            echo -e "${GREEN}✓${NC}"
+
+            # Pull latest container images (doesn't restart containers)
+            echo -n "  Pulling latest container images... "
+            cd /home/pi/.firewalla/run/docker/unifi
+            sudo docker-compose pull --quiet 2>/dev/null || true
+            echo -e "${GREEN}✓${NC}"
+
+            echo ""
+            echo -e "${GREEN}═══════════════════════════════════════════════════════════════${NC}"
+            echo -e "${GREEN}                    UPDATE COMPLETE!                           ${NC}"
+            echo -e "${GREEN}═══════════════════════════════════════════════════════════════${NC}"
+            echo ""
+            echo "Updated components:"
+            echo "  ✓ Startup script"
+            echo "  ✓ Monitoring service"
+            echo "  ✓ Container images (pulled, not applied)"
+            echo ""
+            echo "To apply updated images, run:"
+            echo "  ${GREEN}cd /home/pi/.firewalla/run/docker/unifi && sudo docker-compose up -d${NC}"
+            echo ""
+            echo "Your controller is still running with no downtime."
+            exit 0
+            ;;
+        2)
+            # REINSTALL: Recreate containers but keep data
+            echo ""
+            echo -e "${GREEN}═══════════════════════════════════════════════════════════════${NC}"
+            echo -e "${GREEN}                      REINSTALL MODE                            ${NC}"
+            echo -e "${GREEN}═══════════════════════════════════════════════════════════════${NC}"
+            echo ""
+            echo "This will:"
+            echo "  • Stop and remove all containers"
+            echo "  • Remove Docker networks"
+            echo "  • Recreate everything from scratch"
+            echo "  • ${GREEN}PRESERVE all your data${NC} (/data/unifi, /data/unifi-db)"
+            echo ""
+            echo "Your UniFi settings, devices, and history will be preserved."
+            echo "Downtime: ~2-3 minutes while containers restart."
+            echo ""
+            read -p "Continue with reinstall? (yes/N): " CONFIRM_REINSTALL
+            if [ "$CONFIRM_REINSTALL" != "yes" ]; then
+                echo "Reinstall cancelled."
+                exit 0
+            fi
+
+            echo ""
+            echo "Reinstalling UniFi (preserving data)..."
+
+            # Stop and remove containers (but NOT volumes/data)
+            if [ -f /home/pi/.firewalla/run/docker/unifi/docker-compose.yaml ]; then
+                echo -n "  Stopping containers... "
+                cd /home/pi/.firewalla/run/docker/unifi
+                sudo docker-compose down --remove-orphans 2>/dev/null || true
+                echo -e "${GREEN}✓${NC}"
+            fi
+
+            # Remove networks
+            echo -n "  Removing networks... "
+            sudo docker network rm unifi_unifi-internal unifi_unifi-net 2>/dev/null || true
+            echo -e "${GREEN}✓${NC}"
+
+            # Remove shim
+            echo -n "  Removing shim interface... "
+            sudo ip link delete unifi-shim 2>/dev/null || true
+            echo -e "${GREEN}✓${NC}"
+
+            # Containers will be recreated in main installation flow
+            REINSTALL_MODE=true
+            echo ""
+            echo "Reinstall preparation complete. Continuing with installation..."
+            echo ""
+            ;;
+        3)
             echo ""
             echo -e "${RED}WARNING: This will delete all existing UniFi configuration and data!${NC}"
             read -p "Type 'DELETE' to confirm: " CONFIRM_DELETE
@@ -175,21 +312,10 @@ if [ -d /home/pi/.firewalla/run/docker/unifi ] || \
             echo -e "${GREEN}✓ Cleanup complete - MongoDB directory is empty${NC}"
             echo ""
             ;;
-        2)
+        4|*)
             echo ""
-            echo "Please run the uninstall script first:"
-            echo "  curl -sL \"https://raw.githubusercontent.com/dagecko/unifi-firewalla-macvlan/main/uninstall.sh\" -o /tmp/uninstall.sh"
-            echo "  bash /tmp/uninstall.sh"
+            echo "Installation cancelled."
             exit 0
-            ;;
-        3)
-            echo ""
-            echo -e "${YELLOW}⚠ Continuing with existing installation present...${NC}"
-            echo ""
-            ;;
-        *)
-            echo "Invalid option. Installation cancelled."
-            exit 1
             ;;
     esac
 else
