@@ -622,40 +622,52 @@ echo -e "${GREEN}✓${NC}"
 # Create startup script for persistence
 echo -n "Creating startup script... "
 if [ -n "$SHIM_IP" ]; then
-sudo bash -c "cat > /home/pi/.firewalla/config/post_main.d/start_unifi.sh" << EOF
+sudo bash -c "cat > /home/pi/.firewalla/config/post_main.d/start_unifi.sh" << 'EOFSCRIPT'
 #!/bin/bash
 sudo systemctl start docker
 sleep 5
 cd /home/pi/.firewalla/run/docker/unifi
+
+# Ensure containers are stopped and networks cleaned up
+sudo docker-compose down 2>/dev/null || true
+docker network prune -f 2>/dev/null || true
+
+# Start containers (will recreate networks)
 sudo docker-compose up -d
 
 # Configure Firewalla routing for Docker internet access
 sleep 10
-BRIDGE_ID=\\\$(sudo docker network inspect unifi_unifi-internal | grep '"Id"' | head -1 | cut -d'"' -f4 | cut -c1-12)
-SUBNET=\\\$(sudo docker network inspect unifi_unifi-internal | grep '"Subnet"' | head -1 | cut -d'"' -f4)
-sudo ip route add \\\$SUBNET dev br-\\\$BRIDGE_ID table wan_routable 2>/dev/null || true
+BRIDGE_ID=$(sudo docker network inspect unifi_unifi-internal | grep '"Id"' | head -1 | cut -d'"' -f4 | cut -c1-12)
+SUBNET=$(sudo docker network inspect unifi_unifi-internal | grep '"Subnet"' | head -1 | cut -d'"' -f4)
+sudo ip route add $SUBNET dev br-$BRIDGE_ID table wan_routable 2>/dev/null || true
 
 # Create shim interface for host access to containers
-sudo ip link add unifi-shim link ${PARENT_INTERFACE} type macvlan mode bridge 2>/dev/null || true
-sudo ip addr add ${SHIM_IP}/32 dev unifi-shim 2>/dev/null || true
+sudo ip link add unifi-shim link PARENT_INTERFACE_PLACEHOLDER type macvlan mode bridge 2>/dev/null || true
+sudo ip addr add SHIM_IP_PLACEHOLDER/32 dev unifi-shim 2>/dev/null || true
 sudo ip link set unifi-shim up 2>/dev/null || true
-sudo ip route add ${CONTROLLER_IP}/32 dev unifi-shim 2>/dev/null || true
-sudo ip route add ${CONTROLLER_IP}/32 dev unifi-shim table lan_routable 2>/dev/null || true
+sudo ip route add CONTROLLER_IP_PLACEHOLDER/32 dev unifi-shim 2>/dev/null || true
+sudo ip route add CONTROLLER_IP_PLACEHOLDER/32 dev unifi-shim table lan_routable 2>/dev/null || true
 
 # VLAN-specific fix: Add policy routing rule
 IS_VLAN_PLACEHOLDER
-if [ "\\\$IS_VLAN" = "true" ]; then
+if [ "$IS_VLAN" = "true" ]; then
     # Add policy routing rule for VLAN subnet to use lan_routable table
-    sudo ip rule add from ${NETWORK_BASE}/${NETWORK_CIDR} lookup lan_routable priority 5002 2>/dev/null || true
+    sudo ip rule add from NETWORK_BASE_PLACEHOLDER/NETWORK_CIDR_PLACEHOLDER lookup lan_routable priority 5002 2>/dev/null || true
     # Note: Container routing is handled by the sidecar container
 fi
-EOF
+EOFSCRIPT
 else
 sudo bash -c "cat > /home/pi/.firewalla/config/post_main.d/start_unifi.sh" << 'EOF'
 #!/bin/bash
 sudo systemctl start docker
 sleep 5
 cd /home/pi/.firewalla/run/docker/unifi
+
+# Ensure containers are stopped and networks cleaned up
+sudo docker-compose down 2>/dev/null || true
+docker network prune -f 2>/dev/null || true
+
+# Start containers (will recreate networks)
 sudo docker-compose up -d
 
 # Configure Firewalla routing for Docker internet access
@@ -666,20 +678,23 @@ sudo ip route add $SUBNET dev br-$BRIDGE_ID table wan_routable 2>/dev/null || tr
 
 # VLAN-specific fix: Add policy routing rule
 IS_VLAN_PLACEHOLDER
-NETWORK_BASE_PLACEHOLDER
-NETWORK_CIDR_PLACEHOLDER
 if [ "$IS_VLAN" = "true" ]; then
     # Add policy routing rule for VLAN subnet to use lan_routable table
-    sudo ip rule add from $NETWORK_BASE/$NETWORK_CIDR lookup lan_routable priority 5002 2>/dev/null || true
+    sudo ip rule add from NETWORK_BASE_PLACEHOLDER/NETWORK_CIDR_PLACEHOLDER lookup lan_routable priority 5002 2>/dev/null || true
     # Note: Container routing is handled by the sidecar container
 fi
 EOF
 fi
 sudo chmod +x /home/pi/.firewalla/config/post_main.d/start_unifi.sh
 sudo chown pi:pi /home/pi/.firewalla/config/post_main.d/start_unifi.sh
+
+# Replace placeholders with actual values
 sudo sed -i "s|IS_VLAN_PLACEHOLDER|IS_VLAN=\"${IS_VLAN}\"|g" /home/pi/.firewalla/config/post_main.d/start_unifi.sh
-sudo sed -i "s|NETWORK_BASE_PLACEHOLDER|NETWORK_BASE=\"${NETWORK_BASE}\"|g" /home/pi/.firewalla/config/post_main.d/start_unifi.sh
-sudo sed -i "s|NETWORK_CIDR_PLACEHOLDER|NETWORK_CIDR=\"${NETWORK_CIDR}\"|g" /home/pi/.firewalla/config/post_main.d/start_unifi.sh
+sudo sed -i "s|PARENT_INTERFACE_PLACEHOLDER|${PARENT_INTERFACE}|g" /home/pi/.firewalla/config/post_main.d/start_unifi.sh
+sudo sed -i "s|SHIM_IP_PLACEHOLDER|${SHIM_IP}|g" /home/pi/.firewalla/config/post_main.d/start_unifi.sh
+sudo sed -i "s|CONTROLLER_IP_PLACEHOLDER|${CONTROLLER_IP}|g" /home/pi/.firewalla/config/post_main.d/start_unifi.sh
+sudo sed -i "s|NETWORK_BASE_PLACEHOLDER|${NETWORK_BASE}|g" /home/pi/.firewalla/config/post_main.d/start_unifi.sh
+sudo sed -i "s|NETWORK_CIDR_PLACEHOLDER|${NETWORK_CIDR}|g" /home/pi/.firewalla/config/post_main.d/start_unifi.sh
 echo -e "${GREEN}✓${NC}"
 
 # Save configuration for reference

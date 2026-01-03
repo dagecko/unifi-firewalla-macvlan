@@ -145,6 +145,115 @@ The script handles all complexity automatically - you just select the network an
 ![UniFi setup wizard](screenshots/unifi_controller_ui.png)
 *UniFi Network Application setup wizard*
 
+## Prerequisites
+
+### Firewalla Network Setup
+
+**Before running the installation script**, ensure your Firewalla network is properly configured:
+
+#### 1. Create Your Management Network
+
+Choose one of these approaches:
+
+**Option A: Native LAN (Simpler)**
+- Use an existing LAN network (e.g., br7 on 192.168.101.0/24)
+- No VLAN configuration needed
+- Best for: Home networks, testing, simple setups
+
+**Option B: Dedicated VLAN (Recommended for Production)**
+- Create a management VLAN in Firewalla UI (e.g., VLAN 240 on 192.168.240.0/24)
+- Ensure the VLAN is active and reachable
+- Best for: Production deployments, proper network segmentation
+
+#### 2. Configure Firewall Rules
+
+**If using separate VLANs for management and devices:**
+
+In Firewalla UI, create rules to allow traffic between your device network and management network:
+
+```
+Example:
+Device VLAN (192.168.101.0/24) → Management VLAN (192.168.240.0/24)
+Ports: 8080 (inform), 8443 (UI), 3478 (STUN)
+```
+
+**Key ports to allow:**
+- `8080/tcp` - UniFi inform protocol (device → controller communication)
+- `8443/tcp` - UniFi web UI (your device → controller UI)
+- `8443/tcp` - Device management (controller → device management)
+- `3478/udp` - STUN (for UniFi Talk/Protect if used)
+
+**Note:** If your management network is an "enclave" (isolated network), ensure you configure appropriate rules to allow the above traffic.
+
+#### 3. Reserve IP Address
+
+Ensure you have at least one free IP address on your management network for the UniFi Controller. Consider using a static IP outside your DHCP range (e.g., 192.168.240.2).
+
+### UniFi Device Auto-Discovery (Optional but Recommended)
+
+For UniFi devices to automatically discover the controller without manual adoption:
+
+#### Configure DHCP Option 43
+
+In **Firewalla UI** → **Network Manager** → **Network** → Select your **device network** (where UniFi APs/switches live):
+
+1. Scroll to **DHCP Server** section
+2. Add **DHCP Option 43** with format: `01:04:c0:a8:f0:02`
+   - `01` = suboption (UniFi discovery)
+   - `04` = length (4 bytes for IPv4)
+   - `c0:a8:f0:02` = controller IP in hex (e.g., 192.168.240.2)
+
+**Converting IP to hex:**
+```bash
+# Example: 192.168.240.2
+192 = c0
+168 = a8
+240 = f0
+2   = 02
+# Result: 01:04:c0:a8:f0:02
+```
+
+**Hex conversion table for common octets:**
+```
+1=01, 2=02, 10=0a, 50=32, 100=64, 101=65
+150=96, 168=a8, 192=c0, 240=f0, 254=fe
+```
+
+**Example configurations:**
+- `192.168.1.10` → `01:04:c0:a8:01:0a`
+- `192.168.101.2` → `01:04:c0:a8:65:02`
+- `10.0.50.100` → `01:04:0a:00:32:64`
+
+3. Click **Save** (don't forget this step!)
+
+**Verification:**
+```bash
+# On Firewalla, check dnsmasq config
+grep -r "dhcp-option.*43" /home/pi/.firewalla/config/dnsmasq*/
+
+# Should show: dhcp-option=net:<network>,43,01:04:c0:a8:f0:02
+```
+
+#### Alternative: Manual Device Adoption
+
+Without DHCP Option 43, you can manually adopt devices:
+
+1. SSH to UniFi device: `ssh ubnt@<device-ip>` (default password: `ubnt`)
+2. Set inform URL: `set-inform http://<controller-ip>:8080/inform`
+3. Adopt device in controller UI
+
+**Note:** DHCP Option 43 is strongly recommended for larger deployments to avoid manual configuration of each device.
+
+### Verification Checklist
+
+Before installation, verify:
+
+- [ ] Management network exists and is reachable
+- [ ] IP address reserved for controller (e.g., 192.168.240.2)
+- [ ] Firewall rules allow traffic between device network and management network (if separate)
+- [ ] DHCP Option 43 configured on device network (if using auto-discovery)
+- [ ] SSH access to Firewalla working
+
 ## Quick Install
 
 SSH into your Firewalla and run:
