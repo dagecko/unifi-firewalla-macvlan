@@ -80,10 +80,19 @@ check_container_network() {
 
 # Check if controller is responding on port 8443
 check_controller_health() {
-    # Try to connect to controller port 8443
-    if timeout 5 bash -c "echo >/dev/tcp/${CONTROLLER_IP}/8443" 2>/dev/null; then
+    # Check if UniFi is listening on port 8443 inside the container
+    # Use routing-fixer container since it shares network namespace with unifi
+    if docker exec unifi-routing-fixer netstat -tln 2>/dev/null | grep -q ":8443 "; then
         return 0
     fi
+
+    # If netstat fails, controller might still be starting up
+    # Check if Java process is running as a secondary indicator
+    if docker exec unifi ps aux 2>/dev/null | grep -q "[j]ava.*ace.jar"; then
+        # Java is running, might just be initializing - give it benefit of the doubt
+        return 0
+    fi
+
     return 1
 }
 
@@ -131,9 +140,9 @@ full_recovery() {
     log "Starting containers..."
     docker-compose up -d 2>&1 | tee -a "$LOG_FILE"
 
-    # Wait for containers to initialize
-    log "Waiting for containers to initialize..."
-    sleep 15
+    # Wait for containers to initialize (UniFi takes 2-3 minutes to fully start)
+    log "Waiting for containers to initialize (2 minutes)..."
+    sleep 120
 
     # Recreate shim
     recreate_shim
@@ -176,8 +185,26 @@ monitor() {
     fi
 
     # Check 4: Is controller responding?
+    # Note: Only trigger recovery if controller is consistently down
+    # Controller startup can take 2-3 minutes, so be patient
     if ! check_controller_health; then
+        # Controller not responding - but could be starting up
+        # Check if it's been a reasonable amount of time since last recovery
+        LAST_RECOVERY_FILE="/tmp/unifi-monitor-last-recovery"
+        if [ -f "$LAST_RECOVERY_FILE" ]; then
+            LAST_RECOVERY=$(cat "$LAST_RECOVERY_FILE")
+            CURRENT_TIME=$(date +%s)
+            TIME_SINCE_RECOVERY=$((CURRENT_TIME - LAST_RECOVERY))
+
+            # Only trigger recovery if it's been more than 5 minutes since last recovery
+            if [ $TIME_SINCE_RECOVERY -lt 300 ]; then
+                log "WARNING: Controller not responding, but recovery was recent ($TIME_SINCE_RECOVERY seconds ago). Giving it more time..."
+                return
+            fi
+        fi
+
         log "ERROR: Controller not responding on port 8443. Triggering full recovery..."
+        echo $(date +%s) > "$LAST_RECOVERY_FILE"
         full_recovery
         return
     fi
